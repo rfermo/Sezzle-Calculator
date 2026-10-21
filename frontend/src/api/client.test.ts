@@ -1,0 +1,95 @@
+import { ApiError, postOperation } from './client'
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+describe('postOperation', () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch')
+
+  afterEach(() => {
+    fetchMock.mockReset()
+  })
+
+  it('POSTs the operands as JSON and returns the result', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ result: 5 }))
+
+    const result = await postOperation('add', { a: 2, b: 3 })
+
+    expect(result).toBe(5)
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{"a":2,"b":3}',
+    })
+  })
+
+  it('omits an absent second operand from the request body', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ result: 12 }))
+
+    await postOperation('sqrt', { a: 144 })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/sqrt',
+      expect.objectContaining({ body: '{"a":144}' }),
+    )
+  })
+
+  it.each([
+    [400, 'invalid_request', 'unknown field "c"'],
+    [422, 'division_by_zero', 'cannot divide by zero'],
+  ])('maps a %i error envelope to an ApiError', async (status, code, message) => {
+    fetchMock.mockResolvedValue(jsonResponse({ error: { code, message } }, status))
+
+    const error = await postOperation('divide', { a: 1, b: 0 }).catch((e: unknown) => e)
+
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error).toMatchObject({ name: 'ApiError', code, message })
+  })
+
+  it('reports an unexpected_response when an error body is not JSON', async () => {
+    fetchMock.mockResolvedValue(new Response('<html>Bad Gateway</html>', { status: 502 }))
+
+    const error = await postOperation('add', { a: 1, b: 2 }).catch((e: unknown) => e)
+
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error).toMatchObject({
+      code: 'unexpected_response',
+      message: 'Unexpected server response (HTTP 502).',
+    })
+  })
+
+  it.each([
+    ['a string error', { error: 'boom' }],
+    ['a missing code', { error: { message: 'boom' } }],
+    ['a non-string message', { error: { code: 'internal', message: 42 } }],
+  ])('reports an unexpected_response when an error body has %s', async (_case, body) => {
+    fetchMock.mockResolvedValue(jsonResponse(body, 500))
+
+    await expect(postOperation('add', { a: 1, b: 2 })).rejects.toMatchObject({
+      code: 'unexpected_response',
+    })
+  })
+
+  it('reports an unexpected_response when a success body has no numeric result', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ result: 'five' }))
+
+    await expect(postOperation('add', { a: 2, b: 3 })).rejects.toMatchObject({
+      code: 'unexpected_response',
+      message: 'The server returned a malformed response.',
+    })
+  })
+
+  it('wraps a network failure in an ApiError and keeps the original cause', async () => {
+    const networkFailure = new TypeError('Failed to fetch')
+    fetchMock.mockRejectedValue(networkFailure)
+
+    const error = await postOperation('add', { a: 1, b: 2 }).catch((e: unknown) => e)
+
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error).toMatchObject({ code: 'network_error', cause: networkFailure })
+  })
+})
