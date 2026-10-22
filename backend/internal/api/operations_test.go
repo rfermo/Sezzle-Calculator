@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -118,6 +119,109 @@ func TestAddRejectsWrongMethod(t *testing.T) {
 				t.Errorf("Allow = %q, want it to list POST", allow)
 			}
 		})
+	}
+}
+
+func TestSqrtReturnsRoot(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want float64
+	}{
+		{"perfect square", `{"a": 144}`, 12},
+		{"zero is a valid operand", `{"a": 0}`, 0},
+		{"decimal", `{"a": 6.25}`, 2.5},
+		{"non-perfect square", `{"a": 2}`, math.Sqrt2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := postJSON(NewRouter(discardLogger()), "/api/v1/sqrt", tt.body)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200 (body %q)", rec.Code, rec.Body.String())
+			}
+			var body resultResponse
+			dec := json.NewDecoder(rec.Body)
+			dec.DisallowUnknownFields()
+			if err := dec.Decode(&body); err != nil {
+				t.Fatalf("body is not a result response: %v", err)
+			}
+			if body.Result != tt.want {
+				t.Errorf("result = %v, want %v", body.Result, tt.want)
+			}
+		})
+	}
+}
+
+func TestSqrtRejectsInvalidRequests(t *testing.T) {
+	tests := []struct {
+		name        string
+		body        string
+		wantMessage string
+	}{
+		{"missing a", `{}`, `field "a" is required`},
+		{"null a", `{"a": null}`, `field "a" is required`},
+		{"string operand", `{"a": "144"}`, `field "a" has an invalid type`},
+		{"unexpected b", `{"a": 144, "b": 2}`, `unknown field "b"`},
+		{"b without a", `{"b": 2}`, `unknown field "b"`},
+		{"malformed JSON", `{"a": 144,`, "request body is not valid JSON"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := postJSON(NewRouter(discardLogger()), "/api/v1/sqrt", tt.body)
+
+			detail := assertErrorEnvelope(t, rec, http.StatusBadRequest, codeInvalidRequest)
+			if detail.Message != tt.wantMessage {
+				t.Errorf("message = %q, want %q", detail.Message, tt.wantMessage)
+			}
+		})
+	}
+}
+
+func TestSqrtRejectsWrongContentType(t *testing.T) {
+	rec := httptest.NewRecorder()
+
+	NewRouter(discardLogger()).ServeHTTP(rec, postRequest("/api/v1/sqrt", `{"a": 144}`, "text/plain"))
+
+	assertErrorEnvelope(t, rec, http.StatusBadRequest, codeInvalidRequest)
+}
+
+func TestSqrtReportsNegativeInputAsUnprocessable(t *testing.T) {
+	for _, body := range []string{`{"a": -1}`, `{"a": -0.0001}`} {
+		t.Run(body, func(t *testing.T) {
+			rec := postJSON(NewRouter(discardLogger()), "/api/v1/sqrt", body)
+
+			detail := assertErrorEnvelope(t, rec, http.StatusUnprocessableEntity, codeNegativeSquareRoot)
+			if want := "Cannot take the square root of a negative number"; detail.Message != want {
+				t.Errorf("message = %q, want %q", detail.Message, want)
+			}
+		})
+	}
+}
+
+func TestSqrtRejectsWrongMethod(t *testing.T) {
+	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete, http.MethodPatch} {
+		t.Run(method, func(t *testing.T) {
+			rec := serveRequest(NewRouter(discardLogger()), method, "/api/v1/sqrt")
+
+			assertErrorEnvelope(t, rec, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+			if allow := rec.Header().Get("Allow"); !strings.Contains(allow, http.MethodPost) {
+				t.Errorf("Allow = %q, want it to list POST", allow)
+			}
+		})
+	}
+}
+
+func TestHandleUnaryHidesUnexpectedErrors(t *testing.T) {
+	handler := handleUnary(func(float64) (float64, error) {
+		return 0, errors.New("database password is hunter2")
+	})
+
+	rec := postJSON(handler, "/", `{"a": 1}`)
+
+	detail := assertErrorEnvelope(t, rec, http.StatusInternalServerError, codeInternal)
+	if strings.Contains(detail.Message, "hunter2") {
+		t.Errorf("message %q leaks the underlying error", detail.Message)
 	}
 }
 
