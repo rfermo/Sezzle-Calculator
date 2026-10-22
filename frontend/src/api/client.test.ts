@@ -1,5 +1,5 @@
 import { jsonResponse } from '../test/jsonResponse'
-import { add, ApiError, postOperation } from './client'
+import { add, ApiError, postOperation, subtract } from './client'
 
 describe('postOperation', () => {
   const fetchMock = vi.spyOn(globalThis, 'fetch')
@@ -109,6 +109,33 @@ describe('add', () => {
     )
 
     await expect(add(Number.MAX_VALUE, Number.MAX_VALUE)).rejects.toMatchObject({
+      name: 'ApiError',
+      code: 'result_not_finite',
+    })
+  })
+})
+
+describe('subtract', () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch')
+
+  afterEach(() => {
+    fetchMock.mockReset()
+  })
+
+  it('POSTs both operands to the subtract endpoint and returns the difference', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ result: -3 }))
+
+    await expect(subtract(5, 8)).resolves.toBe(-3)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/subtract', expect.objectContaining({ body: '{"a":5,"b":8}' }))
+  })
+
+  it('rejects with the backend error for an overflowing difference', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ error: { code: 'result_not_finite', message: 'result is not a finite number' } }, 422),
+    )
+
+    await expect(subtract(Number.MAX_VALUE, -Number.MAX_VALUE)).rejects.toMatchObject({
       name: 'ApiError',
       code: 'result_not_finite',
     })
