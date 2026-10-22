@@ -47,3 +47,19 @@ curl -X POST http://localhost:8080/api/v1/add \
 ```json
 {"error": {"code": "result_not_finite", "message": "result is not a finite number"}}
 ```
+
+### `POST /api/v1/subtract`
+
+Returns `a - b`. Both fields are required numbers.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/subtract \
+  -H 'Content-Type: application/json' \
+  -d '{"a": 5, "b": 8}'
+```
+
+```json
+{"result": -3}
+```
+
+A difference that overflows a 64-bit float fails with `422 result_not_finite`, like `add`.
