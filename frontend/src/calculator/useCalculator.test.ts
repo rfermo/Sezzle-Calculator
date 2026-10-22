@@ -1,17 +1,20 @@
 import { act, renderHook } from '@testing-library/react'
-import { add, ApiError } from '../api/client'
+import { add, ApiError, power } from '../api/client'
 import type { CalculatorAction, Digit } from './calculatorReducer'
 import { useCalculator } from './useCalculator'
 
 vi.mock('../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/client')>()),
   add: vi.fn(),
+  power: vi.fn(),
 }))
 
 const addMock = vi.mocked(add)
+const powerMock = vi.mocked(power)
 
 const digit = (value: Digit): CalculatorAction => ({ type: 'digit', digit: value })
 const plus: CalculatorAction = { type: 'operator', operator: '+' }
+const pow: CalculatorAction = { type: 'operator', operator: '^' }
 const equals: CalculatorAction = { type: 'equals' }
 
 function deferred<T>() {
@@ -37,6 +40,7 @@ function setup() {
 describe('useCalculator', () => {
   afterEach(() => {
     addMock.mockReset()
+    powerMock.mockReset()
   })
 
   it('starts idle on zero', () => {
@@ -53,6 +57,26 @@ describe('useCalculator', () => {
 
     expect(addMock).toHaveBeenCalledExactlyOnceWith(2, 3)
     expect(result.current.display).toBe('5')
+  })
+
+  it('calls power, not add, with the base and exponent for the power operator', async () => {
+    powerMock.mockResolvedValue(1024)
+    const { result, press } = setup()
+
+    await press(digit('2'), pow, digit('1'), digit('0'), equals)
+
+    expect(powerMock).toHaveBeenCalledExactlyOnceWith(2, 10)
+    expect(addMock).not.toHaveBeenCalled()
+    expect(result.current.display).toBe('1024')
+  })
+
+  it('exposes the message when power has no finite result', async () => {
+    powerMock.mockRejectedValue(new ApiError('result_not_finite', 'result is not a finite number'))
+    const { result, press } = setup()
+
+    await press(digit('0'), pow, digit('1'), { type: 'toggleSign' }, equals)
+
+    expect(result.current).toMatchObject({ error: 'result is not a finite number', display: '-1' })
   })
 
   it('reports loading until the request settles', async () => {

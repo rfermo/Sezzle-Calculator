@@ -7,7 +7,7 @@ export type Digit = (typeof DIGITS)[number]
 /** Matches the significant digits results are formatted to, so entered values display losslessly. */
 export const MAX_DIGITS = SIGNIFICANT_DIGITS
 
-export type Operator = '+'
+export type Operator = '+' | '^'
 
 /** A binary operator waiting for its right-hand operand. */
 export interface PendingOperation {
