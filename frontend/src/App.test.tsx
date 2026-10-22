@@ -1,5 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import App from './App'
+import { jsonResponse } from './test/jsonResponse'
 
 function press(...labels: string[]) {
   for (const label of labels) {
@@ -8,6 +9,12 @@ function press(...labels: string[]) {
 }
 
 const display = () => screen.getByRole('status', { name: 'Display' })
+
+const fetchMock = vi.spyOn(globalThis, 'fetch')
+
+afterEach(() => {
+  fetchMock.mockReset()
+})
 
 describe('App', () => {
   it('renders the calculator heading', () => {
@@ -25,7 +32,7 @@ describe('App', () => {
   it('exposes every key as a button reachable by its label', () => {
     render(<App />)
 
-    const labels = [...'0123456789', 'Decimal point', 'Clear', 'Backspace', 'Toggle sign']
+    const labels = [...'0123456789', 'Decimal point', 'Clear', 'Backspace', 'Toggle sign', 'Add', 'Equals']
     for (const label of labels) {
       expect(screen.getByRole('button', { name: label })).toBeEnabled()
     }
@@ -76,5 +83,122 @@ describe('App', () => {
 
     expect(display()).toHaveAttribute('aria-live', 'polite')
     expect(display()).toHaveAttribute('aria-atomic', 'true')
+  })
+
+  describe('addition', () => {
+    it('sends both operands to the API and shows the result', async () => {
+      fetchMock.mockResolvedValue(jsonResponse({ result: 5 }))
+      render(<App />)
+
+      press('2', 'Add', '3', 'Equals')
+
+      await waitFor(() => expect(display()).toHaveTextContent(/^5$/))
+      expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+        '/api/v1/add',
+        expect.objectContaining({ method: 'POST', body: '{"a":2,"b":3}' }),
+      )
+    })
+
+    it('hides floating-point noise in the result', async () => {
+      fetchMock.mockResolvedValue(jsonResponse({ result: 0.1 + 0.2 }))
+      render(<App />)
+
+      press('0', 'Decimal point', '1', 'Add', 'Decimal point', '2', 'Equals')
+
+      await waitFor(() => expect(display()).toHaveTextContent(/^0\.3$/))
+    })
+
+    it('evaluates a chain one step at a time', async () => {
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse({ result: 3 }))
+        .mockResolvedValueOnce(jsonResponse({ result: 6 }))
+      render(<App />)
+
+      press('1', 'Add', '2', 'Add')
+      await waitFor(() => expect(display()).toHaveTextContent(/^3$/))
+      press('3', 'Equals')
+
+      await waitFor(() => expect(display()).toHaveTextContent(/^6$/))
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+      expect(fetchMock).toHaveBeenLastCalledWith(
+        '/api/v1/add',
+        expect.objectContaining({ body: '{"a":3,"b":3}' }),
+      )
+    })
+
+    it('does not call the API until equals is pressed', () => {
+      render(<App />)
+
+      press('2', 'Add', '3')
+
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('disables every key while the request is pending', async () => {
+      let respond: (response: Response) => void = () => {}
+      fetchMock.mockReturnValue(new Promise<Response>((resolve) => (respond = resolve)))
+      render(<App />)
+
+      press('2', 'Add', '3', 'Equals')
+
+      for (const button of screen.getAllByRole('button')) {
+        expect(button).toBeDisabled()
+      }
+
+      respond(jsonResponse({ result: 5 }))
+
+      await waitFor(() => expect(display()).toHaveTextContent(/^5$/))
+      for (const button of screen.getAllByRole('button')) {
+        expect(button).toBeEnabled()
+      }
+    })
+
+    it('shows the backend message in an alert when the request is rejected', async () => {
+      fetchMock.mockResolvedValue(
+        jsonResponse({ error: { code: 'result_not_finite', message: 'result is not a finite number' } }, 422),
+      )
+      render(<App />)
+
+      press('9', 'Add', '9', 'Equals')
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('result is not a finite number')
+      expect(display()).toHaveTextContent(/^9$/)
+      expect(screen.getByRole('button', { name: 'Equals' })).toBeEnabled()
+    })
+
+    it('shows a message when the server cannot be reached', async () => {
+      fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
+      render(<App />)
+
+      press('1', 'Add', '1', 'Equals')
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Could not reach the server')
+    })
+
+    it('lets the user retry after an error', async () => {
+      fetchMock
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockResolvedValueOnce(jsonResponse({ result: 2 }))
+      render(<App />)
+
+      press('1', 'Add', '1', 'Equals')
+      await screen.findByRole('alert')
+      press('Equals')
+
+      await waitFor(() => expect(display()).toHaveTextContent(/^2$/))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+
+    it('dismisses the error on the next key press', async () => {
+      fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
+      render(<App />)
+
+      press('1', 'Add', '1', 'Equals')
+      await screen.findByRole('alert')
+      press('Clear')
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(display()).toHaveTextContent(/^0$/)
+    })
   })
 })

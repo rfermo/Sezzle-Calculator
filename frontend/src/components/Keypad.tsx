@@ -1,13 +1,15 @@
-import type { CalculatorAction, Digit } from '../calculator/calculatorReducer'
+import type { Digit, KeyAction } from '../calculator/calculatorReducer'
 
 interface KeypadProps {
-  onAction: (action: CalculatorAction) => void
+  onAction: (action: KeyAction) => void
+  disabled?: boolean
 }
 
 interface KeyProps {
   label: string
   accessibleName?: string
   className?: string
+  disabled: boolean
   onPress: () => void
 }
 
@@ -17,37 +19,80 @@ const DIGIT_ROWS: readonly (readonly Digit[])[] = [
   ['1', '2', '3'],
 ]
 
-function Key({ label, accessibleName, className = '', onPress }: KeyProps) {
+function Key({ label, accessibleName, className = '', disabled, onPress }: KeyProps) {
   return (
-    <button type="button" className={`key ${className}`.trim()} aria-label={accessibleName} onClick={onPress}>
+    <button
+      type="button"
+      className={`key ${className}`.trim()}
+      aria-label={accessibleName}
+      disabled={disabled}
+      onClick={onPress}
+    >
       {label}
     </button>
   )
 }
 
-function Keypad({ onAction }: KeypadProps) {
+function Keypad({ onAction, disabled = false }: KeypadProps) {
   const digitKey = (digit: Digit, className?: string) => (
-    <Key key={digit} label={digit} className={className} onPress={() => onAction({ type: 'digit', digit })} />
+    <Key
+      key={digit}
+      label={digit}
+      className={className}
+      disabled={disabled}
+      onPress={() => onAction({ type: 'digit', digit })}
+    />
   )
 
   return (
     <div className="keypad" role="group" aria-label="Keypad">
-      <Key label="C" accessibleName="Clear" className="key-function" onPress={() => onAction({ type: 'clear' })} />
-      <Key
-        label="±"
-        accessibleName="Toggle sign"
-        className="key-function"
-        onPress={() => onAction({ type: 'toggleSign' })}
-      />
-      <Key
-        label="⌫"
-        accessibleName="Backspace"
-        className="key-function"
-        onPress={() => onAction({ type: 'backspace' })}
-      />
-      {DIGIT_ROWS.flatMap((row) => row.map((digit) => digitKey(digit)))}
-      {digitKey('0', 'key-wide')}
-      <Key label="." accessibleName="Decimal point" onPress={() => onAction({ type: 'decimal' })} />
+      <div className="keypad-main">
+        <Key
+          label="C"
+          accessibleName="Clear"
+          className="key-function"
+          disabled={disabled}
+          onPress={() => onAction({ type: 'clear' })}
+        />
+        <Key
+          label="±"
+          accessibleName="Toggle sign"
+          className="key-function"
+          disabled={disabled}
+          onPress={() => onAction({ type: 'toggleSign' })}
+        />
+        <Key
+          label="⌫"
+          accessibleName="Backspace"
+          className="key-function"
+          disabled={disabled}
+          onPress={() => onAction({ type: 'backspace' })}
+        />
+        {DIGIT_ROWS.flatMap((row) => row.map((digit) => digitKey(digit)))}
+        {digitKey('0', 'key-wide')}
+        <Key
+          label="."
+          accessibleName="Decimal point"
+          disabled={disabled}
+          onPress={() => onAction({ type: 'decimal' })}
+        />
+      </div>
+      <div className="keypad-operators">
+        <Key
+          label="+"
+          accessibleName="Add"
+          className="key-operator"
+          disabled={disabled}
+          onPress={() => onAction({ type: 'operator', operator: '+' })}
+        />
+        <Key
+          label="="
+          accessibleName="Equals"
+          className="key-operator key-equals"
+          disabled={disabled}
+          onPress={() => onAction({ type: 'equals' })}
+        />
+      </div>
     </div>
   )
 }

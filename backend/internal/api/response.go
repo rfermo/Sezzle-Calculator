@@ -15,6 +15,7 @@ const (
 	codeNotFound         = "not_found"
 	codeMethodNotAllowed = "method_not_allowed"
 	codeInternal         = "internal_error"
+	codeResultNotFinite  = "result_not_finite"
 )
 
 type errorBody struct {

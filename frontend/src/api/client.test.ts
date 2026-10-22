@@ -1,11 +1,5 @@
-import { ApiError, postOperation } from './client'
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}
+import { jsonResponse } from '../test/jsonResponse'
+import { add, ApiError, postOperation } from './client'
 
 describe('postOperation', () => {
   const fetchMock = vi.spyOn(globalThis, 'fetch')
@@ -91,5 +85,32 @@ describe('postOperation', () => {
 
     expect(error).toBeInstanceOf(ApiError)
     expect(error).toMatchObject({ code: 'network_error', cause: networkFailure })
+  })
+})
+
+describe('add', () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch')
+
+  afterEach(() => {
+    fetchMock.mockReset()
+  })
+
+  it('POSTs both operands to the add endpoint and returns the sum', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ result: 5 }))
+
+    await expect(add(2, 3)).resolves.toBe(5)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/add', expect.objectContaining({ body: '{"a":2,"b":3}' }))
+  })
+
+  it('rejects with the backend error for an overflowing sum', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ error: { code: 'result_not_finite', message: 'result is not a finite number' } }, 422),
+    )
+
+    await expect(add(Number.MAX_VALUE, Number.MAX_VALUE)).rejects.toMatchObject({
+      name: 'ApiError',
+      code: 'result_not_finite',
+    })
   })
 })
