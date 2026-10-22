@@ -121,6 +121,75 @@ func TestAddRejectsWrongMethod(t *testing.T) {
 	}
 }
 
+func TestMultiplyReturnsProduct(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want float64
+	}{
+		{"integers", `{"a": 6, "b": 7}`, 42},
+		{"negative result", `{"a": 6, "b": -7}`, -42},
+		{"decimals", `{"a": 1.5, "b": 2.5}`, 3.75},
+		{"explicit zero operand", `{"a": 0, "b": 9}`, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := postJSON(NewRouter(discardLogger()), "/api/v1/multiply", tt.body)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200 (body %q)", rec.Code, rec.Body.String())
+			}
+			var body resultResponse
+			if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+				t.Fatalf("body is not a result response: %v", err)
+			}
+			if body.Result != tt.want {
+				t.Errorf("result = %v, want %v", body.Result, tt.want)
+			}
+		})
+	}
+}
+
+func TestMultiplyRejectsInvalidRequests(t *testing.T) {
+	tests := []struct {
+		name        string
+		body        string
+		wantMessage string
+	}{
+		{"missing a", `{"b": 3}`, `field "a" is required`},
+		{"missing b", `{"a": 2}`, `field "b" is required`},
+		{"null operand", `{"a": null, "b": 3}`, `field "a" is required`},
+		{"string operand", `{"a": "2", "b": 3}`, `field "a" has an invalid type`},
+		{"unknown field", `{"a": 2, "b": 3, "c": 4}`, `unknown field "c"`},
+		{"malformed JSON", `{"a": 2,`, "request body is not valid JSON"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := postJSON(NewRouter(discardLogger()), "/api/v1/multiply", tt.body)
+
+			detail := assertErrorEnvelope(t, rec, http.StatusBadRequest, codeInvalidRequest)
+			if detail.Message != tt.wantMessage {
+				t.Errorf("message = %q, want %q", detail.Message, tt.wantMessage)
+			}
+		})
+	}
+}
+
+func TestMultiplyReportsOverflowAsUnprocessable(t *testing.T) {
+	rec := postJSON(NewRouter(discardLogger()), "/api/v1/multiply", `{"a": 1.7976931348623157e308, "b": 2}`)
+
+	assertErrorEnvelope(t, rec, http.StatusUnprocessableEntity, codeResultNotFinite)
+}
+
+func TestMultiplyRejectsWrongMethod(t *testing.T) {
+	rec := serveRequest(NewRouter(discardLogger()), http.MethodGet, "/api/v1/multiply")
+
+	assertErrorEnvelope(t, rec, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+	if allow := rec.Header().Get("Allow"); !strings.Contains(allow, http.MethodPost) {
+		t.Errorf("Allow = %q, want it to list POST", allow)
+	}
+}
+
 func TestHandleBinaryHidesUnexpectedErrors(t *testing.T) {
 	handler := handleBinary(func(float64, float64) (float64, error) {
 		return 0, errors.New("database password is hunter2")
