@@ -133,3 +133,71 @@ func TestHandleBinaryHidesUnexpectedErrors(t *testing.T) {
 		t.Errorf("message %q leaks the underlying error", detail.Message)
 	}
 }
+
+func TestPercentageReturnsPercentOfSecondOperand(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want float64
+	}{
+		{"percent of a whole number", `{"a": 15, "b": 200}`, 30},
+		{"operand order matters", `{"a": 200, "b": 15}`, 30},
+		{"over one hundred percent", `{"a": 150, "b": 80}`, 120},
+		{"negative percent", `{"a": -10, "b": 50}`, -5},
+		{"decimals", `{"a": 12.5, "b": 80}`, 10},
+		{"zero percent", `{"a": 0, "b": 200}`, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := postJSON(NewRouter(discardLogger()), "/api/v1/percentage", tt.body)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200 (body %q)", rec.Code, rec.Body.String())
+			}
+			var body resultResponse
+			if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+				t.Fatalf("body is not a result response: %v", err)
+			}
+			if body.Result != tt.want {
+				t.Errorf("result = %v, want %v", body.Result, tt.want)
+			}
+		})
+	}
+}
+
+func TestPercentageRejectsInvalidRequests(t *testing.T) {
+	tests := []struct {
+		name        string
+		body        string
+		wantMessage string
+	}{
+		{"missing a", `{"b": 200}`, `field "a" is required`},
+		{"missing b", `{"a": 15}`, `field "b" is required`},
+		{"string operand", `{"a": "15", "b": 200}`, `field "a" has an invalid type`},
+		{"unknown field", `{"a": 15, "b": 200, "c": 1}`, `unknown field "c"`},
+		{"malformed JSON", `{"a": 15,`, "request body is not valid JSON"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := postJSON(NewRouter(discardLogger()), "/api/v1/percentage", tt.body)
+
+			detail := assertErrorEnvelope(t, rec, http.StatusBadRequest, codeInvalidRequest)
+			if detail.Message != tt.wantMessage {
+				t.Errorf("message = %q, want %q", detail.Message, tt.wantMessage)
+			}
+		})
+	}
+}
+
+func TestPercentageReportsOverflowAsUnprocessable(t *testing.T) {
+	rec := postJSON(NewRouter(discardLogger()), "/api/v1/percentage",
+		`{"a": 1.7976931348623157e308, "b": 1.7976931348623157e308}`)
+
+	assertErrorEnvelope(t, rec, http.StatusUnprocessableEntity, codeResultNotFinite)
+}
+
+func TestPercentageRejectsWrongMethod(t *testing.T) {
+	rec := serveRequest(NewRouter(discardLogger()), http.MethodGet, "/api/v1/percentage")
+
+	assertErrorEnvelope(t, rec, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+}
