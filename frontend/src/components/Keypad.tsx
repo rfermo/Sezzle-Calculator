@@ -46,6 +46,29 @@ function Keypad({ onAction, disabled = false }: KeypadProps) {
 
   return (
     <div className="keypad" role="group" aria-label="Keypad">
+      <div className="keypad-extra">
+        <Key
+          label="xʸ"
+          accessibleName="Power"
+          className="key-operator"
+          disabled={disabled}
+          onPress={() => onAction({ type: 'operator', operator: 'xʸ' })}
+        />
+        <Key
+          label="√"
+          accessibleName="Square root"
+          className="key-operator"
+          disabled={disabled}
+          onPress={() => onAction({ type: 'unary', operation: 'sqrt' })}
+        />
+        <Key
+          label="%"
+          accessibleName="Percentage"
+          className="key-operator"
+          disabled={disabled}
+          onPress={() => onAction({ type: 'operator', operator: '%' })}
+        />
+      </div>
       <div className="keypad-main">
         <Key
           label="C"
@@ -79,6 +102,20 @@ function Keypad({ onAction, disabled = false }: KeypadProps) {
       </div>
       <div className="keypad-operators">
         <Key
+          label="÷"
+          accessibleName="Divide"
+          className="key-operator"
+          disabled={disabled}
+          onPress={() => onAction({ type: 'operator', operator: '÷' })}
+        />
+        <Key
+          label="×"
+          accessibleName="Multiply"
+          className="key-operator"
+          disabled={disabled}
+          onPress={() => onAction({ type: 'operator', operator: '×' })}
+        />
+        <Key
           label="+"
           accessibleName="Add"
           className="key-operator"
@@ -86,11 +123,11 @@ function Keypad({ onAction, disabled = false }: KeypadProps) {
           onPress={() => onAction({ type: 'operator', operator: '+' })}
         />
         <Key
-          label="%"
-          accessibleName="Percentage"
+          label="−"
+          accessibleName="Subtract"
           className="key-operator"
           disabled={disabled}
-          onPress={() => onAction({ type: 'operator', operator: '%' })}
+          onPress={() => onAction({ type: 'operator', operator: '−' })}
         />
         <Key
           label="="
