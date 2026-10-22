@@ -47,3 +47,17 @@ curl -X POST http://localhost:8080/api/v1/add \
 ```json
 {"error": {"code": "result_not_finite", "message": "result is not a finite number"}}
 ```
+
+### `POST /api/v1/multiply`
+
+Returns `a * b`. Both fields are required numbers. A product that overflows a 64-bit float fails with `422 result_not_finite`, as for `add`; a product too small to represent rounds to `0`.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/multiply \
+  -H 'Content-Type: application/json' \
+  -d '{"a": 6, "b": 7}'
+```
+
+```json
+{"result": 42}
+```
