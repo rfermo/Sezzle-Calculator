@@ -24,6 +24,31 @@ func postJSON(handler http.Handler, target, body string) *httptest.ResponseRecor
 	return rec
 }
 
+// binaryEndpoints are the routes served by handleBinary. Request validation is shared, so its
+// tests run against each of them to catch an operation wired up without it.
+var binaryEndpoints = []string{"add", "subtract", "multiply", "divide"}
+
+func assertResult(t *testing.T, handler http.Handler, target, body string, want float64) {
+	t.Helper()
+	rec := postJSON(handler, target, body)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body %q)", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/json" {
+		t.Errorf("Content-Type = %q, want application/json", got)
+	}
+	var resp resultResponse
+	dec := json.NewDecoder(rec.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&resp); err != nil {
+		t.Fatalf("body is not a result response: %v", err)
+	}
+	if resp.Result != want {
+		t.Errorf("result = %v, want %v", resp.Result, want)
+	}
+}
+
 func TestAddReturnsSum(t *testing.T) {
 	tests := []struct {
 		name string
@@ -38,28 +63,31 @@ func TestAddReturnsSum(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := postJSON(NewRouter(discardLogger()), "/api/v1/add", tt.body)
-
-			if rec.Code != http.StatusOK {
-				t.Fatalf("status = %d, want 200 (body %q)", rec.Code, rec.Body.String())
-			}
-			if got := rec.Header().Get("Content-Type"); got != "application/json" {
-				t.Errorf("Content-Type = %q, want application/json", got)
-			}
-			var body resultResponse
-			dec := json.NewDecoder(rec.Body)
-			dec.DisallowUnknownFields()
-			if err := dec.Decode(&body); err != nil {
-				t.Fatalf("body is not a result response: %v", err)
-			}
-			if body.Result != tt.want {
-				t.Errorf("result = %v, want %v", body.Result, tt.want)
-			}
+			assertResult(t, NewRouter(discardLogger()), "/api/v1/add", tt.body, tt.want)
 		})
 	}
 }
 
-func TestAddRejectsInvalidRequests(t *testing.T) {
+func TestSubtractReturnsDifference(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want float64
+	}{
+		{"integers", `{"a": 8, "b": 5}`, 3},
+		{"negative result", `{"a": 5, "b": 8}`, -3},
+		{"decimals", `{"a": 3.75, "b": 1.25}`, 2.5},
+		{"explicit zeros are valid operands", `{"a": 0, "b": 0}`, 0},
+		{"field order does not matter", `{"b": 5, "a": 8}`, 3},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertResult(t, NewRouter(discardLogger()), "/api/v1/subtract", tt.body, tt.want)
+		})
+	}
+}
+
+func TestBinaryEndpointsRejectInvalidRequests(t *testing.T) {
 	tests := []struct {
 		name        string
 		body        string
@@ -76,24 +104,30 @@ func TestAddRejectsInvalidRequests(t *testing.T) {
 		{"malformed JSON", `{"a": 2,`, "request body is not valid JSON"},
 		{"number beyond float64 range", `{"a": 1e999, "b": 3}`, `field "a" has an invalid type`},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			rec := postJSON(NewRouter(discardLogger()), "/api/v1/add", tt.body)
+	for _, endpoint := range binaryEndpoints {
+		for _, tt := range tests {
+			t.Run(endpoint+"/"+tt.name, func(t *testing.T) {
+				rec := postJSON(NewRouter(discardLogger()), "/api/v1/"+endpoint, tt.body)
 
-			detail := assertErrorEnvelope(t, rec, http.StatusBadRequest, codeInvalidRequest)
-			if detail.Message != tt.wantMessage {
-				t.Errorf("message = %q, want %q", detail.Message, tt.wantMessage)
-			}
-		})
+				detail := assertErrorEnvelope(t, rec, http.StatusBadRequest, codeInvalidRequest)
+				if detail.Message != tt.wantMessage {
+					t.Errorf("message = %q, want %q", detail.Message, tt.wantMessage)
+				}
+			})
+		}
 	}
 }
 
-func TestAddRejectsWrongContentType(t *testing.T) {
-	rec := httptest.NewRecorder()
+func TestBinaryEndpointsRejectWrongContentType(t *testing.T) {
+	for _, endpoint := range binaryEndpoints {
+		t.Run(endpoint, func(t *testing.T) {
+			rec := httptest.NewRecorder()
 
-	NewRouter(discardLogger()).ServeHTTP(rec, postRequest("/api/v1/add", `{"a": 2, "b": 3}`, "text/plain"))
+			NewRouter(discardLogger()).ServeHTTP(rec, postRequest("/api/v1/"+endpoint, `{"a": 2, "b": 3}`, "text/plain"))
 
-	assertErrorEnvelope(t, rec, http.StatusBadRequest, codeInvalidRequest)
+			assertErrorEnvelope(t, rec, http.StatusBadRequest, codeInvalidRequest)
+		})
+	}
 }
 
 func TestAddReportsOverflowAsUnprocessable(t *testing.T) {
@@ -109,16 +143,201 @@ func TestAddReportsOverflowAsUnprocessable(t *testing.T) {
 	}
 }
 
-func TestAddRejectsWrongMethod(t *testing.T) {
-	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete, http.MethodPatch} {
-		t.Run(method, func(t *testing.T) {
-			rec := serveRequest(NewRouter(discardLogger()), method, "/api/v1/add")
+func TestSubtractReportsOverflowAsUnprocessable(t *testing.T) {
+	for _, body := range []string{
+		`{"a": 1.7976931348623157e308, "b": -1.7976931348623157e308}`,
+		`{"a": -1.7976931348623157e308, "b": 1.7976931348623157e308}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			rec := postJSON(NewRouter(discardLogger()), "/api/v1/subtract", body)
 
-			assertErrorEnvelope(t, rec, http.StatusMethodNotAllowed, codeMethodNotAllowed)
-			if allow := rec.Header().Get("Allow"); !strings.Contains(allow, http.MethodPost) {
-				t.Errorf("Allow = %q, want it to list POST", allow)
+			assertErrorEnvelope(t, rec, http.StatusUnprocessableEntity, codeResultNotFinite)
+		})
+	}
+}
+
+func TestMultiplyReturnsProduct(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want float64
+	}{
+		{"integers", `{"a": 6, "b": 7}`, 42},
+		{"negative result", `{"a": 6, "b": -7}`, -42},
+		{"decimals", `{"a": 1.5, "b": 2.5}`, 3.75},
+		{"explicit zero operand", `{"a": 0, "b": 9}`, 0},
+		{"field order does not matter", `{"b": 7, "a": 6}`, 42},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertResult(t, NewRouter(discardLogger()), "/api/v1/multiply", tt.body, tt.want)
+		})
+	}
+}
+
+func TestMultiplyReportsOverflowAsUnprocessable(t *testing.T) {
+	for _, body := range []string{
+		`{"a": 1.7976931348623157e308, "b": 2}`,
+		`{"a": 1.7976931348623157e308, "b": -2}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			rec := postJSON(NewRouter(discardLogger()), "/api/v1/multiply", body)
+
+			assertErrorEnvelope(t, rec, http.StatusUnprocessableEntity, codeResultNotFinite)
+		})
+	}
+}
+
+func TestDivideReturnsQuotient(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want float64
+	}{
+		{"exact quotient", `{"a": 6, "b": 3}`, 2},
+		{"fractional result", `{"a": 1, "b": 4}`, 0.25},
+		{"negative result", `{"a": -6, "b": 3}`, -2},
+		{"zero dividend", `{"a": 0, "b": 5}`, 0},
+		{"field order does not matter", `{"b": 3, "a": 6}`, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertResult(t, NewRouter(discardLogger()), "/api/v1/divide", tt.body, tt.want)
+		})
+	}
+}
+
+func TestDivideReportsDivisionByZeroAsUnprocessable(t *testing.T) {
+	for _, body := range []string{
+		`{"a": 1, "b": 0}`,
+		`{"a": 1, "b": -0}`,
+		`{"a": 1, "b": 0.0}`,
+		`{"a": 0, "b": 0}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			rec := postJSON(NewRouter(discardLogger()), "/api/v1/divide", body)
+
+			detail := assertErrorEnvelope(t, rec, http.StatusUnprocessableEntity, codeDivisionByZero)
+			if detail.Message != "division by zero" {
+				t.Errorf("message = %q, want %q", detail.Message, "division by zero")
 			}
 		})
+	}
+}
+
+func TestDivideReportsOverflowAsUnprocessable(t *testing.T) {
+	rec := postJSON(NewRouter(discardLogger()), "/api/v1/divide", `{"a": 1.7976931348623157e308, "b": 0.5}`)
+
+	assertErrorEnvelope(t, rec, http.StatusUnprocessableEntity, codeResultNotFinite)
+}
+
+func TestBinaryEndpointsRejectWrongMethod(t *testing.T) {
+	for _, endpoint := range binaryEndpoints {
+		for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete, http.MethodPatch} {
+			t.Run(endpoint+"/"+method, func(t *testing.T) {
+				rec := serveRequest(NewRouter(discardLogger()), method, "/api/v1/"+endpoint)
+
+				assertErrorEnvelope(t, rec, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+				if allow := rec.Header().Get("Allow"); !strings.Contains(allow, http.MethodPost) {
+					t.Errorf("Allow = %q, want it to list POST", allow)
+				}
+			})
+		}
+	}
+}
+
+func TestHandleBinaryHidesUnexpectedErrors(t *testing.T) {
+	handler := handleBinary(func(float64, float64) (float64, error) {
+		return 0, errors.New("database password is hunter2")
+	})
+
+	rec := postJSON(handler, "/", `{"a": 1, "b": 2}`)
+
+	detail := assertErrorEnvelope(t, rec, http.StatusInternalServerError, codeInternal)
+	if strings.Contains(detail.Message, "hunter2") {
+		t.Errorf("message %q leaks the underlying error", detail.Message)
+	}
+}
+
+func TestPowerReturnsExponentiation(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want float64
+	}{
+		{"integers", `{"a": 2, "b": 10}`, 1024},
+		{"negative exponent", `{"a": 2, "b": -2}`, 0.25},
+		{"fractional exponent", `{"a": 9, "b": 0.5}`, 3},
+		{"zero exponent", `{"a": 5, "b": 0}`, 1},
+		{"zero to the zero is one", `{"a": 0, "b": 0}`, 1},
+		{"a is the base and b the exponent", `{"b": 3, "a": 2}`, 8},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := postJSON(NewRouter(discardLogger()), "/api/v1/power", tt.body)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200 (body %q)", rec.Code, rec.Body.String())
+			}
+			var body resultResponse
+			if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+				t.Fatalf("body is not a result response: %v", err)
+			}
+			if body.Result != tt.want {
+				t.Errorf("result = %v, want %v", body.Result, tt.want)
+			}
+		})
+	}
+}
+
+func TestPowerRejectsInvalidRequests(t *testing.T) {
+	tests := []struct {
+		name        string
+		body        string
+		wantMessage string
+	}{
+		{"missing a", `{"b": 3}`, `field "a" is required`},
+		{"missing b", `{"a": 2}`, `field "b" is required`},
+		{"string operand", `{"a": "2", "b": 3}`, `field "a" has an invalid type`},
+		{"unknown field", `{"a": 2, "b": 3, "c": 4}`, `unknown field "c"`},
+		{"malformed JSON", `{"a": 2,`, "request body is not valid JSON"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := postJSON(NewRouter(discardLogger()), "/api/v1/power", tt.body)
+
+			detail := assertErrorEnvelope(t, rec, http.StatusBadRequest, codeInvalidRequest)
+			if detail.Message != tt.wantMessage {
+				t.Errorf("message = %q, want %q", detail.Message, tt.wantMessage)
+			}
+		})
+	}
+}
+
+func TestPowerReportsNonFiniteResultsAsUnprocessable(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"overflow", `{"a": 10, "b": 400}`},
+		{"negative base with fractional exponent", `{"a": -8, "b": 0.5}`},
+		{"zero base with negative exponent", `{"a": 0, "b": -1}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := postJSON(NewRouter(discardLogger()), "/api/v1/power", tt.body)
+
+			assertErrorEnvelope(t, rec, http.StatusUnprocessableEntity, codeResultNotFinite)
+		})
+	}
+}
+
+func TestPowerRejectsWrongMethod(t *testing.T) {
+	rec := serveRequest(NewRouter(discardLogger()), http.MethodGet, "/api/v1/power")
+
+	assertErrorEnvelope(t, rec, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+	if allow := rec.Header().Get("Allow"); !strings.Contains(allow, http.MethodPost) {
+		t.Errorf("Allow = %q, want it to list POST", allow)
 	}
 }
 
@@ -135,20 +354,7 @@ func TestSqrtReturnsRoot(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := postJSON(NewRouter(discardLogger()), "/api/v1/sqrt", tt.body)
-
-			if rec.Code != http.StatusOK {
-				t.Fatalf("status = %d, want 200 (body %q)", rec.Code, rec.Body.String())
-			}
-			var body resultResponse
-			dec := json.NewDecoder(rec.Body)
-			dec.DisallowUnknownFields()
-			if err := dec.Decode(&body); err != nil {
-				t.Fatalf("body is not a result response: %v", err)
-			}
-			if body.Result != tt.want {
-				t.Errorf("result = %v, want %v", body.Result, tt.want)
-			}
+			assertResult(t, NewRouter(discardLogger()), "/api/v1/sqrt", tt.body, tt.want)
 		})
 	}
 }
@@ -218,19 +424,6 @@ func TestHandleUnaryHidesUnexpectedErrors(t *testing.T) {
 	})
 
 	rec := postJSON(handler, "/", `{"a": 1}`)
-
-	detail := assertErrorEnvelope(t, rec, http.StatusInternalServerError, codeInternal)
-	if strings.Contains(detail.Message, "hunter2") {
-		t.Errorf("message %q leaks the underlying error", detail.Message)
-	}
-}
-
-func TestHandleBinaryHidesUnexpectedErrors(t *testing.T) {
-	handler := handleBinary(func(float64, float64) (float64, error) {
-		return 0, errors.New("database password is hunter2")
-	})
-
-	rec := postJSON(handler, "/", `{"a": 1, "b": 2}`)
 
 	detail := assertErrorEnvelope(t, rec, http.StatusInternalServerError, codeInternal)
 	if strings.Contains(detail.Message, "hunter2") {

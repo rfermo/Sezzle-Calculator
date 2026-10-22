@@ -7,7 +7,8 @@ export type Digit = (typeof DIGITS)[number]
 /** Matches the significant digits results are formatted to, so entered values display losslessly. */
 export const MAX_DIGITS = SIGNIFICANT_DIGITS
 
-export type Operator = '+'
+/** The key labels double as identifiers; subtraction is U+2212 (−), not a hyphen. */
+export type Operator = '+' | '−' | '×' | '÷' | 'xʸ'
 
 /** An operation on the displayed number alone, applied as soon as its key is pressed. */
 export type UnaryOperation = 'sqrt'

@@ -92,6 +92,8 @@ func requireOperand(w http.ResponseWriter, name string, value *float64) (float64
 // side, so it is logged and reported as a 500 without leaking the error text.
 func writeOperationError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, calculator.ErrDivisionByZero):
+		writeError(w, http.StatusUnprocessableEntity, codeDivisionByZero, err.Error())
 	case errors.Is(err, calculator.ErrResultNotFinite):
 		writeError(w, http.StatusUnprocessableEntity, codeResultNotFinite, err.Error())
 	case errors.Is(err, calculator.ErrNegativeSquareRoot):

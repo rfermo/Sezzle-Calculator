@@ -1,5 +1,5 @@
 import { jsonResponse } from '../test/jsonResponse'
-import { add, ApiError, postOperation, sqrt } from './client'
+import { add, ApiError, divide, multiply, postOperation, power, sqrt, subtract } from './client'
 
 describe('postOperation', () => {
   const fetchMock = vi.spyOn(globalThis, 'fetch')
@@ -112,6 +112,108 @@ describe('add', () => {
       name: 'ApiError',
       code: 'result_not_finite',
     })
+  })
+})
+
+describe('subtract', () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch')
+
+  afterEach(() => {
+    fetchMock.mockReset()
+  })
+
+  it('POSTs both operands to the subtract endpoint and returns the difference', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ result: -3 }))
+
+    await expect(subtract(5, 8)).resolves.toBe(-3)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/subtract', expect.objectContaining({ body: '{"a":5,"b":8}' }))
+  })
+
+  it('rejects with the backend error for an overflowing difference', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ error: { code: 'result_not_finite', message: 'result is not a finite number' } }, 422),
+    )
+
+    await expect(subtract(Number.MAX_VALUE, -Number.MAX_VALUE)).rejects.toMatchObject({
+      name: 'ApiError',
+      code: 'result_not_finite',
+    })
+  })
+})
+
+describe('multiply', () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch')
+
+  afterEach(() => {
+    fetchMock.mockReset()
+  })
+
+  it('POSTs both operands to the multiply endpoint and returns the product', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ result: 42 }))
+
+    await expect(multiply(6, 7)).resolves.toBe(42)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/multiply', expect.objectContaining({ body: '{"a":6,"b":7}' }))
+  })
+
+  it('rejects with the backend error for an overflowing product', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ error: { code: 'result_not_finite', message: 'result is not a finite number' } }, 422),
+    )
+
+    await expect(multiply(Number.MAX_VALUE, 2)).rejects.toMatchObject({
+      name: 'ApiError',
+      code: 'result_not_finite',
+    })
+  })
+})
+
+describe('divide', () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch')
+
+  afterEach(() => {
+    fetchMock.mockReset()
+  })
+
+  it('POSTs both operands to the divide endpoint and returns the quotient', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ result: 0.25 }))
+
+    await expect(divide(1, 4)).resolves.toBe(0.25)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/divide', expect.objectContaining({ body: '{"a":1,"b":4}' }))
+  })
+
+  it('rejects with the backend error code for a zero divisor', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ error: { code: 'division_by_zero', message: 'division by zero' } }, 422),
+    )
+
+    await expect(divide(1, 0)).rejects.toMatchObject({ name: 'ApiError', code: 'division_by_zero' })
+  })
+})
+
+describe('power', () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch')
+
+  afterEach(() => {
+    fetchMock.mockReset()
+  })
+
+  it('POSTs the base as a and the exponent as b to the power endpoint', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ result: 1024 }))
+
+    await expect(power(2, 10)).resolves.toBe(1024)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/power', expect.objectContaining({ body: '{"a":2,"b":10}' }))
+  })
+
+  it('rejects with the backend error for a result that is not finite', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ error: { code: 'result_not_finite', message: 'result is not a finite number' } }, 422),
+    )
+
+    await expect(power(-8, 0.5)).rejects.toMatchObject({ name: 'ApiError', code: 'result_not_finite' })
   })
 })
 

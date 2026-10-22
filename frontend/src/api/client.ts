@@ -89,6 +89,23 @@ export function add(a: number, b: number): Promise<number> {
   return postOperation('add', { a, b })
 }
 
+export function subtract(a: number, b: number): Promise<number> {
+  return postOperation('subtract', { a, b })
+}
+
+export function multiply(a: number, b: number): Promise<number> {
+  return postOperation('multiply', { a, b })
+}
+
+export function divide(a: number, b: number): Promise<number> {
+  return postOperation('divide', { a, b })
+}
+
+/** Raises `base` to the power `exp`. */
+export function power(base: number, exp: number): Promise<number> {
+  return postOperation('power', { a: base, b: exp })
+}
+
 export function sqrt(a: number): Promise<number> {
   return postOperation('sqrt', { a })
 }

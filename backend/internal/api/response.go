@@ -16,6 +16,7 @@ const (
 	codeMethodNotAllowed = "method_not_allowed"
 	codeInternal         = "internal_error"
 	codeResultNotFinite  = "result_not_finite"
+	codeDivisionByZero   = "division_by_zero"
 
 	codeNegativeSquareRoot = "negative_square_root"
 )
