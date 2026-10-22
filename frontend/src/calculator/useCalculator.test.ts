@@ -1,19 +1,22 @@
 import { act, renderHook } from '@testing-library/react'
-import { add, ApiError, multiply } from '../api/client'
+import { add, ApiError, multiply, subtract } from '../api/client'
 import type { CalculatorAction, Digit } from './calculatorReducer'
 import { useCalculator } from './useCalculator'
 
 vi.mock('../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/client')>()),
   add: vi.fn(),
+  subtract: vi.fn(),
   multiply: vi.fn(),
 }))
 
 const addMock = vi.mocked(add)
+const subtractMock = vi.mocked(subtract)
 const multiplyMock = vi.mocked(multiply)
 
 const digit = (value: Digit): CalculatorAction => ({ type: 'digit', digit: value })
 const plus: CalculatorAction = { type: 'operator', operator: '+' }
+const minus: CalculatorAction = { type: 'operator', operator: '−' }
 const times: CalculatorAction = { type: 'operator', operator: '×' }
 const equals: CalculatorAction = { type: 'equals' }
 
@@ -40,6 +43,7 @@ function setup() {
 describe('useCalculator', () => {
   afterEach(() => {
     addMock.mockReset()
+    subtractMock.mockReset()
     multiplyMock.mockReset()
   })
 
@@ -57,6 +61,17 @@ describe('useCalculator', () => {
 
     expect(addMock).toHaveBeenCalledExactlyOnceWith(2, 3)
     expect(result.current.display).toBe('5')
+  })
+
+  it('calls subtract, and not add, for the minus operator', async () => {
+    subtractMock.mockResolvedValue(-3)
+    const { result, press } = setup()
+
+    await press(digit('5'), minus, digit('8'), equals)
+
+    expect(subtractMock).toHaveBeenCalledExactlyOnceWith(5, 8)
+    expect(addMock).not.toHaveBeenCalled()
+    expect(result.current.display).toBe('-3')
   })
 
   it('calls multiply, not add, for the multiplication operator', async () => {

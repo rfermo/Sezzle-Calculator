@@ -20,6 +20,7 @@ const clear: CalculatorAction = { type: 'clear' }
 const backspace: CalculatorAction = { type: 'backspace' }
 const toggleSign: CalculatorAction = { type: 'toggleSign' }
 const plus: CalculatorAction = { type: 'operator', operator: '+' }
+const minus: CalculatorAction = { type: 'operator', operator: '−' }
 const times: CalculatorAction = { type: 'operator', operator: '×' }
 const equals: CalculatorAction = { type: 'equals' }
 const succeed = (result: number): CalculatorAction => ({ type: 'calculationSucceeded', result })
@@ -288,6 +289,48 @@ describe('calculatorReducer', () => {
       const state = run([...digits('1'), plus, ...digits('2'), plus, succeed(0.1 + 0.2)])
 
       expect(state.pending?.left).toBe(0.3)
+    })
+  })
+
+  describe('subtraction', () => {
+    it('captures the entered number as the left operand when minus is pressed', () => {
+      expect(run([...digits('5'), minus]).pending).toEqual({ operator: '−', left: 5 })
+    })
+
+    it('requests a subtraction on equals', () => {
+      const state = run([...digits('5'), minus, ...digits('8'), equals])
+
+      expect(state.calculation).toEqual({ operator: '−', left: 5, right: 8, next: null })
+    })
+
+    it('shows a negative result', () => {
+      expect(run([...digits('5'), minus, ...digits('8'), equals, succeed(-3)]).display).toBe('-3')
+    })
+
+    it('accepts a negative right operand', () => {
+      const state = run([...digits('5'), minus, ...digits('2'), toggleSign, equals])
+
+      expect(state.calculation).toMatchObject({ left: 5, right: -2 })
+    })
+
+    it('continues from a negative result', () => {
+      const state = run([...digits('5'), minus, ...digits('8'), minus, succeed(-3), ...digits('2'), equals])
+
+      expect(state.calculation).toEqual({ operator: '−', left: -3, right: 2, next: null })
+    })
+
+    it('replaces a pending operator that has no right operand yet', () => {
+      const state = run([...digits('5'), plus, minus])
+
+      expect(state.pending).toEqual({ operator: '−', left: 5 })
+      expect(state.calculation).toBeNull()
+    })
+
+    it('chains across different operators, applying the earlier one first', () => {
+      const state = run([...digits('9'), plus, ...digits('4'), minus])
+
+      expect(state.calculation).toEqual({ operator: '+', left: 9, right: 4, next: '−' })
+      expect(run([succeed(13)], state).pending).toEqual({ operator: '−', left: 13 })
     })
   })
 

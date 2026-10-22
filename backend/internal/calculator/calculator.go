@@ -16,6 +16,11 @@ func Add(a, b float64) (float64, error) {
 	return requireFinite(a + b)
 }
 
+// Subtract returns a - b.
+func Subtract(a, b float64) (float64, error) {
+	return requireFinite(a - b)
+}
+
 // Multiply returns a * b. Products too small to represent underflow to zero rather than failing.
 func Multiply(a, b float64) (float64, error) {
 	return requireFinite(a * b)
