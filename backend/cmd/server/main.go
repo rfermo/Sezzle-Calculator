@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -40,11 +41,29 @@ func run(ctx context.Context, getenv func(string) string, logger *slog.Logger) e
 	if err != nil {
 		return err
 	}
+	opts, err := staticOptions(getenv("STATIC_DIR"))
+	if err != nil {
+		return err
+	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
-	return serve(ctx, ln, api.NewRouter(logger), logger)
+	return serve(ctx, ln, api.NewRouter(logger, opts...), logger)
+}
+
+// staticOptions serves the built frontend from dir. An empty dir (the dev default, where Vite
+// serves the frontend) adds no options. A dir without index.html fails at startup instead of
+// serving a broken page.
+func staticOptions(dir string) ([]api.Option, error) {
+	if dir == "" {
+		return nil, nil
+	}
+	fsys := os.DirFS(dir)
+	if _, err := fs.Stat(fsys, "index.html"); err != nil {
+		return nil, fmt.Errorf("invalid STATIC_DIR %q: %w", dir, err)
+	}
+	return []api.Option{api.WithStaticFiles(fsys)}, nil
 }
 
 // listenAddr turns the PORT env value into a listen address, defaulting when unset.

@@ -3,6 +3,24 @@
 
 Repository for the Sezzle Calculator code.
 
+## Docker
+
+The `Dockerfile` builds the frontend and the backend into one small image (about 23 MB). The Go server serves the UI at `/` and the API at `/api/v1/*` on a single port, so there is no CORS setup or reverse proxy.
+
+```bash
+docker build -t calculator .
+docker run -p 8080:8080 calculator
+```
+
+Open <http://localhost:8080>. The container runs as a non-root user, holds only the compiled binary and the built frontend assets (no sources, Node or Go toolchain), and reports its health by polling `/healthz`.
+
+| Variable | Default in the image | Meaning |
+|---|---|---|
+| `PORT` | `8080` | Port the server listens on inside the container. Change the host side with `-p 9000:8080`. |
+| `STATIC_DIR` | `/app/public` | Directory holding the built frontend. When unset (as in local dev, where Vite serves the UI) the server only exposes the API. The server refuses to start if the directory has no `index.html`. |
+
+Any `GET` outside `/api` that does not match a file returns `index.html`. Paths under `/api` keep the JSON `404`/`405` responses.
+
 ## API
 
 All endpoints live under `/api/v1`, accept and return JSON, and require `Content-Type: application/json`.
