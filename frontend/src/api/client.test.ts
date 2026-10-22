@@ -1,5 +1,5 @@
 import { jsonResponse } from '../test/jsonResponse'
-import { add, ApiError, divide, postOperation } from './client'
+import { add, ApiError, divide, multiply, postOperation, subtract } from './client'
 
 describe('postOperation', () => {
   const fetchMock = vi.spyOn(globalThis, 'fetch')
@@ -109,6 +109,60 @@ describe('add', () => {
     )
 
     await expect(add(Number.MAX_VALUE, Number.MAX_VALUE)).rejects.toMatchObject({
+      name: 'ApiError',
+      code: 'result_not_finite',
+    })
+  })
+})
+
+describe('subtract', () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch')
+
+  afterEach(() => {
+    fetchMock.mockReset()
+  })
+
+  it('POSTs both operands to the subtract endpoint and returns the difference', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ result: -3 }))
+
+    await expect(subtract(5, 8)).resolves.toBe(-3)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/subtract', expect.objectContaining({ body: '{"a":5,"b":8}' }))
+  })
+
+  it('rejects with the backend error for an overflowing difference', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ error: { code: 'result_not_finite', message: 'result is not a finite number' } }, 422),
+    )
+
+    await expect(subtract(Number.MAX_VALUE, -Number.MAX_VALUE)).rejects.toMatchObject({
+      name: 'ApiError',
+      code: 'result_not_finite',
+    })
+  })
+})
+
+describe('multiply', () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch')
+
+  afterEach(() => {
+    fetchMock.mockReset()
+  })
+
+  it('POSTs both operands to the multiply endpoint and returns the product', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ result: 42 }))
+
+    await expect(multiply(6, 7)).resolves.toBe(42)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/multiply', expect.objectContaining({ body: '{"a":6,"b":7}' }))
+  })
+
+  it('rejects with the backend error for an overflowing product', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ error: { code: 'result_not_finite', message: 'result is not a finite number' } }, 422),
+    )
+
+    await expect(multiply(Number.MAX_VALUE, 2)).rejects.toMatchObject({
       name: 'ApiError',
       code: 'result_not_finite',
     })

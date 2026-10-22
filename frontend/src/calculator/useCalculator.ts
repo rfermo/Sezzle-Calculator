@@ -1,9 +1,11 @@
 import { useEffect, useReducer } from 'react'
-import { add, ApiError, divide } from '../api/client'
+import { add, ApiError, divide, multiply, subtract } from '../api/client'
 import { calculatorReducer, initialState, type Operator } from './calculatorReducer'
 
 const OPERATIONS: Record<Operator, (a: number, b: number) => Promise<number>> = {
   '+': add,
+  '−': subtract,
+  '×': multiply,
   '÷': divide,
 }
 

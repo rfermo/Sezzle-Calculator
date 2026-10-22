@@ -19,6 +19,16 @@ func Add(a, b float64) (float64, error) {
 	return requireFinite(a + b)
 }
 
+// Subtract returns a - b.
+func Subtract(a, b float64) (float64, error) {
+	return requireFinite(a - b)
+}
+
+// Multiply returns a * b. Products too small to represent underflow to zero rather than failing.
+func Multiply(a, b float64) (float64, error) {
+	return requireFinite(a * b)
+}
+
 // Divide returns a / b. A zero divisor is rejected explicitly because float64 division would
 // otherwise yield ±Inf, or NaN for 0/0, which would be reported as a generic non-finite result.
 func Divide(a, b float64) (float64, error) {

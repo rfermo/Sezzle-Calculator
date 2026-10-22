@@ -86,11 +86,25 @@ function Keypad({ onAction, disabled = false }: KeypadProps) {
           onPress={() => onAction({ type: 'operator', operator: '÷' })}
         />
         <Key
+          label="×"
+          accessibleName="Multiply"
+          className="key-operator"
+          disabled={disabled}
+          onPress={() => onAction({ type: 'operator', operator: '×' })}
+        />
+        <Key
           label="+"
           accessibleName="Add"
           className="key-operator"
           disabled={disabled}
           onPress={() => onAction({ type: 'operator', operator: '+' })}
+        />
+        <Key
+          label="−"
+          accessibleName="Subtract"
+          className="key-operator"
+          disabled={disabled}
+          onPress={() => onAction({ type: 'operator', operator: '−' })}
         />
         <Key
           label="="
