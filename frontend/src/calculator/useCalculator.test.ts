@@ -1,17 +1,20 @@
 import { act, renderHook } from '@testing-library/react'
-import { add, ApiError } from '../api/client'
+import { add, ApiError, percentage } from '../api/client'
 import type { CalculatorAction, Digit } from './calculatorReducer'
 import { useCalculator } from './useCalculator'
 
 vi.mock('../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/client')>()),
   add: vi.fn(),
+  percentage: vi.fn(),
 }))
 
 const addMock = vi.mocked(add)
+const percentageMock = vi.mocked(percentage)
 
 const digit = (value: Digit): CalculatorAction => ({ type: 'digit', digit: value })
 const plus: CalculatorAction = { type: 'operator', operator: '+' }
+const percent: CalculatorAction = { type: 'operator', operator: '%' }
 const equals: CalculatorAction = { type: 'equals' }
 
 function deferred<T>() {
@@ -37,6 +40,7 @@ function setup() {
 describe('useCalculator', () => {
   afterEach(() => {
     addMock.mockReset()
+    percentageMock.mockReset()
   })
 
   it('starts idle on zero', () => {
@@ -86,6 +90,17 @@ describe('useCalculator', () => {
     await press(digit('3'), equals)
     expect(addMock).toHaveBeenLastCalledWith(3, 3)
     expect(result.current.display).toBe('6')
+  })
+
+  it('calls percentage, and not add, for the percent operator', async () => {
+    percentageMock.mockResolvedValue(30)
+    const { result, press } = setup()
+
+    await press(digit('1'), digit('5'), percent, digit('2'), digit('0'), digit('0'), equals)
+
+    expect(percentageMock).toHaveBeenCalledExactlyOnceWith(15, 200)
+    expect(addMock).not.toHaveBeenCalled()
+    expect(result.current.display).toBe('30')
   })
 
   it('exposes the message of an ApiError', async () => {

@@ -88,3 +88,8 @@ export async function postOperation(operation: string, operands: Operands): Prom
 export function add(a: number, b: number): Promise<number> {
   return postOperation('add', { a, b })
 }
+
+/** `a` percent of `b`, so `percentage(15, 200)` is 30. */
+export function percentage(a: number, b: number): Promise<number> {
+  return postOperation('percentage', { a, b })
+}

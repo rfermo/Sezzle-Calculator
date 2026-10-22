@@ -86,6 +86,13 @@ function Keypad({ onAction, disabled = false }: KeypadProps) {
           onPress={() => onAction({ type: 'operator', operator: '+' })}
         />
         <Key
+          label="%"
+          accessibleName="Percentage"
+          className="key-operator"
+          disabled={disabled}
+          onPress={() => onAction({ type: 'operator', operator: '%' })}
+        />
+        <Key
           label="="
           accessibleName="Equals"
           className="key-operator key-equals"

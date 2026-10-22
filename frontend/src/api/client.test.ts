@@ -1,5 +1,5 @@
 import { jsonResponse } from '../test/jsonResponse'
-import { add, ApiError, postOperation } from './client'
+import { add, ApiError, percentage, postOperation } from './client'
 
 describe('postOperation', () => {
   const fetchMock = vi.spyOn(globalThis, 'fetch')
@@ -109,6 +109,36 @@ describe('add', () => {
     )
 
     await expect(add(Number.MAX_VALUE, Number.MAX_VALUE)).rejects.toMatchObject({
+      name: 'ApiError',
+      code: 'result_not_finite',
+    })
+  })
+})
+
+describe('percentage', () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch')
+
+  afterEach(() => {
+    fetchMock.mockReset()
+  })
+
+  it('POSTs both operands to the percentage endpoint and returns the result', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ result: 30 }))
+
+    await expect(percentage(15, 200)).resolves.toBe(30)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/percentage',
+      expect.objectContaining({ method: 'POST', body: '{"a":15,"b":200}' }),
+    )
+  })
+
+  it('rejects with the backend error for an overflowing result', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ error: { code: 'result_not_finite', message: 'result is not a finite number' } }, 422),
+    )
+
+    await expect(percentage(Number.MAX_VALUE, Number.MAX_VALUE)).rejects.toMatchObject({
       name: 'ApiError',
       code: 'result_not_finite',
     })
