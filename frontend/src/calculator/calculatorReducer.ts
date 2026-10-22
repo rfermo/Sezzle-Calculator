@@ -8,7 +8,7 @@ export type Digit = (typeof DIGITS)[number]
 export const MAX_DIGITS = SIGNIFICANT_DIGITS
 
 /** The key labels double as identifiers; subtraction is U+2212 (−), not a hyphen. */
-export type Operator = '+' | '−' | '×'
+export type Operator = '+' | '−' | '×' | '÷'
 
 /** A binary operator waiting for its right-hand operand. */
 export interface PendingOperation {

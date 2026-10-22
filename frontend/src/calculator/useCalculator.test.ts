@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react'
-import { add, ApiError, multiply, subtract } from '../api/client'
+import { add, ApiError, divide, multiply, subtract } from '../api/client'
 import type { CalculatorAction, Digit } from './calculatorReducer'
 import { useCalculator } from './useCalculator'
 
@@ -8,16 +8,19 @@ vi.mock('../api/client', async (importOriginal) => ({
   add: vi.fn(),
   subtract: vi.fn(),
   multiply: vi.fn(),
+  divide: vi.fn(),
 }))
 
 const addMock = vi.mocked(add)
 const subtractMock = vi.mocked(subtract)
 const multiplyMock = vi.mocked(multiply)
+const divideMock = vi.mocked(divide)
 
 const digit = (value: Digit): CalculatorAction => ({ type: 'digit', digit: value })
 const plus: CalculatorAction = { type: 'operator', operator: '+' }
 const minus: CalculatorAction = { type: 'operator', operator: '−' }
 const times: CalculatorAction = { type: 'operator', operator: '×' }
+const dividedBy: CalculatorAction = { type: 'operator', operator: '÷' }
 const equals: CalculatorAction = { type: 'equals' }
 
 function deferred<T>() {
@@ -45,6 +48,7 @@ describe('useCalculator', () => {
     addMock.mockReset()
     subtractMock.mockReset()
     multiplyMock.mockReset()
+    divideMock.mockReset()
   })
 
   it('starts idle on zero', () => {
@@ -128,6 +132,30 @@ describe('useCalculator', () => {
       error: 'result is not a finite number',
       isLoading: false,
       display: '3',
+    })
+  })
+
+  it('calls divide, not add, for the divide operator', async () => {
+    divideMock.mockResolvedValue(0.25)
+    const { result, press } = setup()
+
+    await press(digit('1'), dividedBy, digit('4'), equals)
+
+    expect(divideMock).toHaveBeenCalledExactlyOnceWith(1, 4)
+    expect(addMock).not.toHaveBeenCalled()
+    expect(result.current.display).toBe('0.25')
+  })
+
+  it('replaces the technical division_by_zero message with a friendly one', async () => {
+    divideMock.mockRejectedValue(new ApiError('division_by_zero', 'division by zero'))
+    const { result, press } = setup()
+
+    await press(digit('1'), dividedBy, digit('0'), equals)
+
+    expect(result.current).toMatchObject({
+      error: 'Cannot divide by zero.',
+      isLoading: false,
+      display: '0',
     })
   })
 

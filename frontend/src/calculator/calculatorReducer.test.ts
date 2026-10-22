@@ -22,6 +22,7 @@ const toggleSign: CalculatorAction = { type: 'toggleSign' }
 const plus: CalculatorAction = { type: 'operator', operator: '+' }
 const minus: CalculatorAction = { type: 'operator', operator: '−' }
 const times: CalculatorAction = { type: 'operator', operator: '×' }
+const dividedBy: CalculatorAction = { type: 'operator', operator: '÷' }
 const equals: CalculatorAction = { type: 'equals' }
 const succeed = (result: number): CalculatorAction => ({ type: 'calculationSucceeded', result })
 const fail = (message: string): CalculatorAction => ({ type: 'calculationFailed', message })
@@ -376,6 +377,38 @@ describe('calculatorReducer', () => {
 
       expect(failed.pending).toEqual({ operator: '×', left: 6 })
       expect(run([equals], failed).calculation).toEqual({ operator: '×', left: 6, right: 7, next: null })
+    })
+  })
+
+  describe('division', () => {
+    it('captures the left operand with the divide operator pending', () => {
+      expect(run([...digits('8'), dividedBy]).pending).toEqual({ operator: '÷', left: 8 })
+    })
+
+    it('requests a division on equals', () => {
+      const state = run([...digits('1'), dividedBy, ...digits('4'), equals])
+
+      expect(state.calculation).toEqual({ operator: '÷', left: 1, right: 4, next: null })
+    })
+
+    it('replaces a pending operator that has no right operand yet', () => {
+      const state = run([...digits('6'), plus, dividedBy])
+
+      expect(state.pending).toEqual({ operator: '÷', left: 6 })
+      expect(state.calculation).toBeNull()
+    })
+
+    it('chains into a division, leaving divide pending after the previous step', () => {
+      const state = run([...digits('6'), plus, ...digits('2'), dividedBy])
+
+      expect(state.calculation).toEqual({ operator: '+', left: 6, right: 2, next: '÷' })
+      expect(run([succeed(8)], state).pending).toEqual({ operator: '÷', left: 8 })
+    })
+
+    it('sends a zero divisor to the API rather than judging it locally', () => {
+      const state = run([...digits('1'), dividedBy, ...digits('0'), equals])
+
+      expect(state.calculation).toEqual({ operator: '÷', left: 1, right: 0, next: null })
     })
   })
 

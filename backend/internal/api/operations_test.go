@@ -25,7 +25,7 @@ func postJSON(handler http.Handler, target, body string) *httptest.ResponseRecor
 
 // binaryEndpoints are the routes served by handleBinary. Request validation is shared, so its
 // tests run against each of them to catch an operation wired up without it.
-var binaryEndpoints = []string{"add", "subtract", "multiply"}
+var binaryEndpoints = []string{"add", "subtract", "multiply", "divide"}
 
 func assertResult(t *testing.T, handler http.Handler, target, body string, want float64) {
 	t.Helper()
@@ -185,6 +185,49 @@ func TestMultiplyReportsOverflowAsUnprocessable(t *testing.T) {
 			assertErrorEnvelope(t, rec, http.StatusUnprocessableEntity, codeResultNotFinite)
 		})
 	}
+}
+
+func TestDivideReturnsQuotient(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want float64
+	}{
+		{"exact quotient", `{"a": 6, "b": 3}`, 2},
+		{"fractional result", `{"a": 1, "b": 4}`, 0.25},
+		{"negative result", `{"a": -6, "b": 3}`, -2},
+		{"zero dividend", `{"a": 0, "b": 5}`, 0},
+		{"field order does not matter", `{"b": 3, "a": 6}`, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertResult(t, NewRouter(discardLogger()), "/api/v1/divide", tt.body, tt.want)
+		})
+	}
+}
+
+func TestDivideReportsDivisionByZeroAsUnprocessable(t *testing.T) {
+	for _, body := range []string{
+		`{"a": 1, "b": 0}`,
+		`{"a": 1, "b": -0}`,
+		`{"a": 1, "b": 0.0}`,
+		`{"a": 0, "b": 0}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			rec := postJSON(NewRouter(discardLogger()), "/api/v1/divide", body)
+
+			detail := assertErrorEnvelope(t, rec, http.StatusUnprocessableEntity, codeDivisionByZero)
+			if detail.Message != "division by zero" {
+				t.Errorf("message = %q, want %q", detail.Message, "division by zero")
+			}
+		})
+	}
+}
+
+func TestDivideReportsOverflowAsUnprocessable(t *testing.T) {
+	rec := postJSON(NewRouter(discardLogger()), "/api/v1/divide", `{"a": 1.7976931348623157e308, "b": 0.5}`)
+
+	assertErrorEnvelope(t, rec, http.StatusUnprocessableEntity, codeResultNotFinite)
 }
 
 func TestBinaryEndpointsRejectWrongMethod(t *testing.T) {
