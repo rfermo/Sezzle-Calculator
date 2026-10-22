@@ -28,7 +28,10 @@ Given that S4 had enough context in the ACs and it was scaffolding only, I just 
 
 For stories 5-10, I spawned 6 agents in parallel with their own Git worktree to implement the rest of the operations since most of the code was repetitive for both the client and server layers.
 
+S11 (Story #11):
+Again, the ACs of the story were very clear so I just did the following:
+- "Implement story #11 in @docs/stories.md"
 
-
-
-
+S12 (Story #12):
+S12 is documentation only and its ACs spell out the README contents and the verification steps (running every `curl` example, following the README literally, using real coverage numbers), so I gave Claude the following prompt:
+- "Implement story #12 in @docs/stories.md"
