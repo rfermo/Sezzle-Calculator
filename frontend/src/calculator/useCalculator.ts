@@ -1,10 +1,11 @@
 import { useEffect, useReducer } from 'react'
-import { add, ApiError, subtract } from '../api/client'
+import { add, ApiError, multiply, subtract } from '../api/client'
 import { calculatorReducer, initialState, type Operator } from './calculatorReducer'
 
 const OPERATIONS: Record<Operator, (a: number, b: number) => Promise<number>> = {
   '+': add,
   '−': subtract,
+  '×': multiply,
 }
 
 const UNEXPECTED_ERROR_MESSAGE = 'Something went wrong. Please try again.'

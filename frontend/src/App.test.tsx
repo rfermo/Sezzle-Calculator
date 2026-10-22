@@ -32,7 +32,7 @@ describe('App', () => {
   it('exposes every key as a button reachable by its label', () => {
     render(<App />)
 
-    const labels = [...'0123456789', 'Decimal point', 'Clear', 'Backspace', 'Toggle sign', 'Add', 'Subtract', 'Equals']
+    const labels = [...'0123456789', 'Decimal point', 'Clear', 'Backspace', 'Toggle sign', 'Add', 'Subtract', 'Multiply', 'Equals']
     for (const label of labels) {
       expect(screen.getByRole('button', { name: label })).toBeEnabled()
     }
@@ -135,6 +135,51 @@ describe('App', () => {
       render(<App />)
 
       press('9', 'Subtract', '9', 'Equals')
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('result is not a finite number')
+    })
+  })
+
+  describe('multiplication', () => {
+    it('sends both operands to the multiply endpoint and shows the product', async () => {
+      fetchMock.mockResolvedValue(jsonResponse({ result: 42 }))
+      render(<App />)
+
+      press('6', 'Multiply', '7', 'Equals')
+
+      await waitFor(() => expect(display()).toHaveTextContent(/^42$/))
+      expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+        '/api/v1/multiply',
+        expect.objectContaining({ method: 'POST', body: '{"a":6,"b":7}' }),
+      )
+    })
+
+    it('mixes operators in one chain, each step using its own endpoint', async () => {
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse({ result: 5 }))
+        .mockResolvedValueOnce(jsonResponse({ result: 20 }))
+      render(<App />)
+
+      press('2', 'Add', '3', 'Multiply')
+      await waitFor(() => expect(display()).toHaveTextContent(/^5$/))
+      press('4', 'Equals')
+
+      await waitFor(() => expect(display()).toHaveTextContent(/^20$/))
+      expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/add', expect.objectContaining({ body: '{"a":2,"b":3}' }))
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        2,
+        '/api/v1/multiply',
+        expect.objectContaining({ body: '{"a":5,"b":4}' }),
+      )
+    })
+
+    it('shows the backend message when the product overflows', async () => {
+      fetchMock.mockResolvedValue(
+        jsonResponse({ error: { code: 'result_not_finite', message: 'result is not a finite number' } }, 422),
+      )
+      render(<App />)
+
+      press('9', 'Multiply', '9', 'Equals')
 
       expect(await screen.findByRole('alert')).toHaveTextContent('result is not a finite number')
     })

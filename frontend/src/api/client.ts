@@ -92,3 +92,7 @@ export function add(a: number, b: number): Promise<number> {
 export function subtract(a: number, b: number): Promise<number> {
   return postOperation('subtract', { a, b })
 }
+
+export function multiply(a: number, b: number): Promise<number> {
+  return postOperation('multiply', { a, b })
+}

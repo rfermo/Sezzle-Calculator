@@ -25,7 +25,7 @@ func postJSON(handler http.Handler, target, body string) *httptest.ResponseRecor
 
 // binaryEndpoints are the routes served by handleBinary. Request validation is shared, so its
 // tests run against each of them to catch an operation wired up without it.
-var binaryEndpoints = []string{"add", "subtract"}
+var binaryEndpoints = []string{"add", "subtract", "multiply"}
 
 func assertResult(t *testing.T, handler http.Handler, target, body string, want float64) {
 	t.Helper()
@@ -149,6 +149,38 @@ func TestSubtractReportsOverflowAsUnprocessable(t *testing.T) {
 	} {
 		t.Run(body, func(t *testing.T) {
 			rec := postJSON(NewRouter(discardLogger()), "/api/v1/subtract", body)
+
+			assertErrorEnvelope(t, rec, http.StatusUnprocessableEntity, codeResultNotFinite)
+		})
+	}
+}
+
+func TestMultiplyReturnsProduct(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want float64
+	}{
+		{"integers", `{"a": 6, "b": 7}`, 42},
+		{"negative result", `{"a": 6, "b": -7}`, -42},
+		{"decimals", `{"a": 1.5, "b": 2.5}`, 3.75},
+		{"explicit zero operand", `{"a": 0, "b": 9}`, 0},
+		{"field order does not matter", `{"b": 7, "a": 6}`, 42},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertResult(t, NewRouter(discardLogger()), "/api/v1/multiply", tt.body, tt.want)
+		})
+	}
+}
+
+func TestMultiplyReportsOverflowAsUnprocessable(t *testing.T) {
+	for _, body := range []string{
+		`{"a": 1.7976931348623157e308, "b": 2}`,
+		`{"a": 1.7976931348623157e308, "b": -2}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			rec := postJSON(NewRouter(discardLogger()), "/api/v1/multiply", body)
 
 			assertErrorEnvelope(t, rec, http.StatusUnprocessableEntity, codeResultNotFinite)
 		})

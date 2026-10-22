@@ -1,5 +1,5 @@
 import { jsonResponse } from '../test/jsonResponse'
-import { add, ApiError, postOperation, subtract } from './client'
+import { add, ApiError, multiply, postOperation, subtract } from './client'
 
 describe('postOperation', () => {
   const fetchMock = vi.spyOn(globalThis, 'fetch')
@@ -136,6 +136,33 @@ describe('subtract', () => {
     )
 
     await expect(subtract(Number.MAX_VALUE, -Number.MAX_VALUE)).rejects.toMatchObject({
+      name: 'ApiError',
+      code: 'result_not_finite',
+    })
+  })
+})
+
+describe('multiply', () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch')
+
+  afterEach(() => {
+    fetchMock.mockReset()
+  })
+
+  it('POSTs both operands to the multiply endpoint and returns the product', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ result: 42 }))
+
+    await expect(multiply(6, 7)).resolves.toBe(42)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/multiply', expect.objectContaining({ body: '{"a":6,"b":7}' }))
+  })
+
+  it('rejects with the backend error for an overflowing product', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ error: { code: 'result_not_finite', message: 'result is not a finite number' } }, 422),
+    )
+
+    await expect(multiply(Number.MAX_VALUE, 2)).rejects.toMatchObject({
       name: 'ApiError',
       code: 'result_not_finite',
     })

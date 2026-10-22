@@ -21,6 +21,11 @@ func Subtract(a, b float64) (float64, error) {
 	return requireFinite(a - b)
 }
 
+// Multiply returns a * b. Products too small to represent underflow to zero rather than failing.
+func Multiply(a, b float64) (float64, error) {
+	return requireFinite(a * b)
+}
+
 func requireFinite(result float64) (float64, error) {
 	if math.IsNaN(result) || math.IsInf(result, 0) {
 		return 0, ErrResultNotFinite

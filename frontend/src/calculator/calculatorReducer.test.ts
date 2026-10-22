@@ -21,6 +21,7 @@ const backspace: CalculatorAction = { type: 'backspace' }
 const toggleSign: CalculatorAction = { type: 'toggleSign' }
 const plus: CalculatorAction = { type: 'operator', operator: '+' }
 const minus: CalculatorAction = { type: 'operator', operator: '−' }
+const times: CalculatorAction = { type: 'operator', operator: '×' }
 const equals: CalculatorAction = { type: 'equals' }
 const succeed = (result: number): CalculatorAction => ({ type: 'calculationSucceeded', result })
 const fail = (message: string): CalculatorAction => ({ type: 'calculationFailed', message })
@@ -330,6 +331,51 @@ describe('calculatorReducer', () => {
 
       expect(state.calculation).toEqual({ operator: '+', left: 9, right: 4, next: '−' })
       expect(run([succeed(13)], state).pending).toEqual({ operator: '−', left: 13 })
+    })
+  })
+
+  describe('multiplication', () => {
+    it('captures the entered number as the left operand', () => {
+      expect(run([...digits('6'), times]).pending).toEqual({ operator: '×', left: 6 })
+    })
+
+    it('requests a multiply calculation on equals', () => {
+      const state = run([...digits('6'), times, ...digits('7'), equals])
+
+      expect(state.calculation).toEqual({ operator: '×', left: 6, right: 7, next: null })
+    })
+
+    it('shows the product when the calculation succeeds', () => {
+      const state = run([...digits('6'), times, ...digits('7'), equals, succeed(42)])
+
+      expect(state).toEqual({ ...initialState, display: '42', entry: 'settled' })
+    })
+
+    it('replaces a pending operator that has no right operand yet', () => {
+      const state = run([...digits('6'), plus, times])
+
+      expect(state.pending).toEqual({ operator: '×', left: 6 })
+      expect(state.calculation).toBeNull()
+    })
+
+    it('evaluates the pending operator first when a different operator follows', () => {
+      const state = run([...digits('2'), plus, ...digits('3'), times])
+
+      expect(state.calculation).toEqual({ operator: '+', left: 2, right: 3, next: '×' })
+      expect(run([succeed(5)], state).pending).toEqual({ operator: '×', left: 5 })
+    })
+
+    it('chains multiplications from the displayed result', () => {
+      const state = run([...digits('2'), times, ...digits('3'), times, succeed(6), ...digits('4'), equals])
+
+      expect(state.calculation).toEqual({ operator: '×', left: 6, right: 4, next: null })
+    })
+
+    it('keeps the multiplication so it can be retried after an error', () => {
+      const failed = run([...digits('6'), times, ...digits('7'), equals, fail('boom')])
+
+      expect(failed.pending).toEqual({ operator: '×', left: 6 })
+      expect(run([equals], failed).calculation).toEqual({ operator: '×', left: 6, right: 7, next: null })
     })
   })
 

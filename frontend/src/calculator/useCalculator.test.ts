@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react'
-import { add, ApiError, subtract } from '../api/client'
+import { add, ApiError, multiply, subtract } from '../api/client'
 import type { CalculatorAction, Digit } from './calculatorReducer'
 import { useCalculator } from './useCalculator'
 
@@ -7,14 +7,17 @@ vi.mock('../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/client')>()),
   add: vi.fn(),
   subtract: vi.fn(),
+  multiply: vi.fn(),
 }))
 
 const addMock = vi.mocked(add)
 const subtractMock = vi.mocked(subtract)
+const multiplyMock = vi.mocked(multiply)
 
 const digit = (value: Digit): CalculatorAction => ({ type: 'digit', digit: value })
 const plus: CalculatorAction = { type: 'operator', operator: '+' }
 const minus: CalculatorAction = { type: 'operator', operator: '−' }
+const times: CalculatorAction = { type: 'operator', operator: '×' }
 const equals: CalculatorAction = { type: 'equals' }
 
 function deferred<T>() {
@@ -41,6 +44,7 @@ describe('useCalculator', () => {
   afterEach(() => {
     addMock.mockReset()
     subtractMock.mockReset()
+    multiplyMock.mockReset()
   })
 
   it('starts idle on zero', () => {
@@ -68,6 +72,17 @@ describe('useCalculator', () => {
     expect(subtractMock).toHaveBeenCalledExactlyOnceWith(5, 8)
     expect(addMock).not.toHaveBeenCalled()
     expect(result.current.display).toBe('-3')
+  })
+
+  it('calls multiply, not add, for the multiplication operator', async () => {
+    multiplyMock.mockResolvedValue(42)
+    const { result, press } = setup()
+
+    await press(digit('6'), times, digit('7'), equals)
+
+    expect(multiplyMock).toHaveBeenCalledExactlyOnceWith(6, 7)
+    expect(addMock).not.toHaveBeenCalled()
+    expect(result.current.display).toBe('42')
   })
 
   it('reports loading until the request settles', async () => {
