@@ -54,6 +54,13 @@ function Keypad({ onAction, disabled = false }: KeypadProps) {
           disabled={disabled}
           onPress={() => onAction({ type: 'operator', operator: 'xʸ' })}
         />
+        <Key
+          label="√"
+          accessibleName="Square root"
+          className="key-operator"
+          disabled={disabled}
+          onPress={() => onAction({ type: 'unary', operation: 'sqrt' })}
+        />
       </div>
       <div className="keypad-main">
         <Key

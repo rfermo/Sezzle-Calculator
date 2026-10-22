@@ -10,6 +10,9 @@ export const MAX_DIGITS = SIGNIFICANT_DIGITS
 /** The key labels double as identifiers; subtraction is U+2212 (−), not a hyphen. */
 export type Operator = '+' | '−' | '×' | '÷' | 'xʸ'
 
+/** An operation on the displayed number alone, applied as soon as its key is pressed. */
+export type UnaryOperation = 'sqrt'
+
 /** A binary operator waiting for its right-hand operand. */
 export interface PendingOperation {
   operator: Operator
@@ -20,13 +23,16 @@ export interface PendingOperation {
  * An API request the reducer wants made. The reducer stays pure by describing the I/O here;
  * `useCalculator` performs it and reports back with `calculationSucceeded` or `calculationFailed`.
  */
-export interface Calculation {
-  operator: Operator
-  left: number
-  right: number
-  /** The operator to leave pending once the result arrives, when the request was triggered by chaining. */
-  next: Operator | null
-}
+export type Calculation =
+  | {
+      kind: 'binary'
+      operator: Operator
+      left: number
+      right: number
+      /** The operator to leave pending once the result arrives, when the request was triggered by chaining. */
+      next: Operator | null
+    }
+  | { kind: 'unary'; operation: UnaryOperation; operand: number }
 
 export interface CalculatorState {
   /** The number on screen, kept as a string so `0.` and `-0.50` survive until submitted. */
@@ -35,8 +41,11 @@ export interface CalculatorState {
   /**
    * `editing`: the display is a number being typed. `settled`: it holds a finished value (a result,
    * or an operand already captured in `pending`), so the next digit starts a fresh number.
+   * `operand`: like `settled`, but the value is also the right-hand operand of `pending` (the result
+   * of a unary operation mid-expression), so `=` or another operator can use it. Only occurs while
+   * `pending` is set.
    */
-  entry: 'editing' | 'settled'
+  entry: 'editing' | 'settled' | 'operand'
   /** Non-null while a request is in flight. */
   calculation: Calculation | null
   error: string | null
@@ -49,6 +58,7 @@ export type KeyAction =
   | { type: 'backspace' }
   | { type: 'toggleSign' }
   | { type: 'operator'; operator: Operator }
+  | { type: 'unary'; operation: UnaryOperation }
   | { type: 'equals' }
 
 type CalculationOutcome =
@@ -103,11 +113,11 @@ function toggleSign(display: string): string {
 
 /** Typing over a settled value starts a new number, which is the same as typing onto a lone zero. */
 function typedDisplay(state: CalculatorState): string {
-  return state.entry === 'settled' ? '0' : state.display
+  return state.entry === 'editing' ? state.display : '0'
 }
 
 function requestCalculation(pending: PendingOperation, display: string, next: Operator | null): Calculation {
-  return { operator: pending.operator, left: pending.left, right: Number(display), next }
+  return { kind: 'binary', operator: pending.operator, left: pending.left, right: Number(display), next }
 }
 
 function chooseOperator(state: CalculatorState, operator: Operator): CalculatorState {
@@ -129,6 +139,11 @@ function evaluate(state: CalculatorState): CalculatorState {
   return { ...state, calculation: requestCalculation(state.pending, state.display, null) }
 }
 
+/** Unlike a binary operator this needs no second operand, so it always acts on whatever is displayed. */
+function applyUnary(state: CalculatorState, operation: UnaryOperation): CalculatorState {
+  return { ...state, calculation: { kind: 'unary', operation, operand: Number(state.display) } }
+}
+
 function applyKey(state: CalculatorState, action: KeyAction): CalculatorState {
   switch (action.type) {
     case 'digit':
@@ -139,7 +154,7 @@ function applyKey(state: CalculatorState, action: KeyAction): CalculatorState {
       return initialState
     case 'backspace':
       // A settled value is not being typed, so there is nothing to delete from it.
-      return state.entry === 'settled' ? state : { ...state, display: deleteLastCharacter(state.display) }
+      return state.entry === 'editing' ? { ...state, display: deleteLastCharacter(state.display) } : state
     case 'toggleSign':
       // After an operator the display still shows the captured left operand; negating it would not change the calculation.
       return state.entry === 'settled' && state.pending !== null
@@ -147,6 +162,8 @@ function applyKey(state: CalculatorState, action: KeyAction): CalculatorState {
         : { ...state, display: toggleSign(state.display) }
     case 'operator':
       return chooseOperator(state, action.operator)
+    case 'unary':
+      return applyUnary(state, action.operation)
     case 'equals':
       return evaluate(state)
   }
@@ -158,6 +175,10 @@ function completeCalculation(state: CalculatorState, result: number): Calculator
     return state
   }
   const display = formatNumber(result)
+  if (calculation.kind === 'unary') {
+    // The expression in progress is untouched: the result replaces only the number it was applied to.
+    return { ...state, display, entry: state.pending === null ? 'settled' : 'operand', calculation: null, error: null }
+  }
   return {
     display,
     // Chaining continues from the displayed value, so what the user sees is what the next step uses.

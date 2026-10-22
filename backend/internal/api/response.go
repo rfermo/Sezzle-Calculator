@@ -17,6 +17,8 @@ const (
 	codeInternal         = "internal_error"
 	codeResultNotFinite  = "result_not_finite"
 	codeDivisionByZero   = "division_by_zero"
+
+	codeNegativeSquareRoot = "negative_square_root"
 )
 
 type errorBody struct {

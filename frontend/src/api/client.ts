@@ -105,3 +105,7 @@ export function divide(a: number, b: number): Promise<number> {
 export function power(base: number, exp: number): Promise<number> {
   return postOperation('power', { a: base, b: exp })
 }
+
+export function sqrt(a: number): Promise<number> {
+  return postOperation('sqrt', { a })
+}

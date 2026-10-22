@@ -1,5 +1,5 @@
 import { jsonResponse } from '../test/jsonResponse'
-import { add, ApiError, divide, multiply, postOperation, power, subtract } from './client'
+import { add, ApiError, divide, multiply, postOperation, power, sqrt, subtract } from './client'
 
 describe('postOperation', () => {
   const fetchMock = vi.spyOn(globalThis, 'fetch')
@@ -214,5 +214,32 @@ describe('power', () => {
     )
 
     await expect(power(-8, 0.5)).rejects.toMatchObject({ name: 'ApiError', code: 'result_not_finite' })
+  })
+})
+
+describe('sqrt', () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch')
+
+  afterEach(() => {
+    fetchMock.mockReset()
+  })
+
+  it('POSTs only the operand to the sqrt endpoint and returns the root', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ result: 12 }))
+
+    await expect(sqrt(144)).resolves.toBe(12)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/sqrt', expect.objectContaining({ body: '{"a":144}' }))
+  })
+
+  it('rejects with the backend error for a negative operand', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(
+        { error: { code: 'negative_square_root', message: 'Cannot take the square root of a negative number' } },
+        422,
+      ),
+    )
+
+    await expect(sqrt(-4)).rejects.toMatchObject({ name: 'ApiError', code: 'negative_square_root' })
   })
 })

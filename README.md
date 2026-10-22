@@ -22,6 +22,7 @@ Every error uses the same envelope:
 | 405 | `method_not_allowed` | Wrong HTTP method (the `Allow` header lists the right one) |
 | 422 | `division_by_zero` | The divisor is `0` (or `-0`) |
 | 422 | `result_not_finite` | The inputs are valid but the result overflows or is undefined, and JSON cannot represent it |
+| 422 | `negative_square_root` | `sqrt` was given a negative number, which has no real square root |
 
 ### `POST /api/v1/add`
 
@@ -135,4 +136,30 @@ curl -X POST http://localhost:8080/api/v1/power \
 
 ```json
 {"error": {"code": "result_not_finite", "message": "result is not a finite number"}}
+```
+
+### `POST /api/v1/sqrt`
+
+Returns the square root of `a`. This is the only endpoint that takes a single operand: `a` is a required number and any other field, including `b`, is rejected with `400 invalid_request`.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/sqrt \
+  -H 'Content-Type: application/json' \
+  -d '{"a": 144}'
+```
+
+```json
+{"result": 12}
+```
+
+A negative number fails with `422`:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/sqrt \
+  -H 'Content-Type: application/json' \
+  -d '{"a": -4}'
+```
+
+```json
+{"error": {"code": "negative_square_root", "message": "Cannot take the square root of a negative number"}}
 ```

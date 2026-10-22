@@ -1,13 +1,29 @@
 import { useEffect, useReducer } from 'react'
-import { add, ApiError, divide, multiply, power, subtract } from '../api/client'
-import { calculatorReducer, initialState, type Operator } from './calculatorReducer'
+import { add, ApiError, divide, multiply, power, sqrt, subtract } from '../api/client'
+import {
+  calculatorReducer,
+  initialState,
+  type Calculation,
+  type Operator,
+  type UnaryOperation,
+} from './calculatorReducer'
 
-const OPERATIONS: Record<Operator, (a: number, b: number) => Promise<number>> = {
+const BINARY_OPERATIONS: Record<Operator, (a: number, b: number) => Promise<number>> = {
   '+': add,
   '−': subtract,
   '×': multiply,
   '÷': divide,
   'xʸ': power,
+}
+
+const UNARY_OPERATIONS: Record<UnaryOperation, (a: number) => Promise<number>> = {
+  sqrt,
+}
+
+function perform(calculation: Calculation): Promise<number> {
+  return calculation.kind === 'unary'
+    ? UNARY_OPERATIONS[calculation.operation](calculation.operand)
+    : BINARY_OPERATIONS[calculation.operator](calculation.left, calculation.right)
 }
 
 const UNEXPECTED_ERROR_MESSAGE = 'Something went wrong. Please try again.'
@@ -35,7 +51,7 @@ export function useCalculator() {
     }
     // Drops the outcome if this request was superseded or the calculator unmounted while it was in flight.
     let cancelled = false
-    OPERATIONS[calculation.operator](calculation.left, calculation.right).then(
+    perform(calculation).then(
       (result) => {
         if (!cancelled) {
           dispatch({ type: 'calculationSucceeded', result })

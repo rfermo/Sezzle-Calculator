@@ -17,6 +17,7 @@ func NewRouter(logger *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/v1/multiply", handleBinary(calculator.Multiply))
 	mux.HandleFunc("POST /api/v1/divide", handleBinary(calculator.Divide))
 	mux.HandleFunc("POST /api/v1/power", handleBinary(calculator.Power))
+	mux.HandleFunc("POST /api/v1/sqrt", handleUnary(calculator.Sqrt))
 	return requestLogger(logger, recoverer(logger, jsonErrors(mux)))
 }
 
