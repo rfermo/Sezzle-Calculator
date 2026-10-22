@@ -47,3 +47,19 @@ curl -X POST http://localhost:8080/api/v1/add \
 ```json
 {"error": {"code": "result_not_finite", "message": "result is not a finite number"}}
 ```
+
+### `POST /api/v1/percentage`
+
+Returns **`a` percent of `b`**, that is `a * b / 100`. Both fields are required numbers, and the order matters: `a` is the percent and `b` is the amount it is taken of, so `{"a": 15, "b": 200}` is 15% of 200.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/percentage \
+  -H 'Content-Type: application/json' \
+  -d '{"a": 15, "b": 200}'
+```
+
+```json
+{"result": 30}
+```
+
+The calculator's `%` key is a binary operator that follows this order: `15 % 200 =` shows `30`. Values over 100 and negative values are valid (`150` percent of `80` is `120`). A result that overflows a 64-bit float fails with `422 result_not_finite`, as for `add`. The product `a * b` is allowed to exceed the float range when `a * b / 100` does not.
