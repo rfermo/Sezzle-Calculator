@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -61,8 +63,18 @@ func freePort(t *testing.T) string {
 	return port
 }
 
+// portEnv is a getenv that sets only PORT, so the other settings keep their defaults.
+func portEnv(port string) func(string) string {
+	return func(key string) string {
+		if key == "PORT" {
+			return port
+		}
+		return ""
+	}
+}
+
 func TestRunRejectsInvalidPort(t *testing.T) {
-	getenv := func(string) string { return "not-a-port" }
+	getenv := portEnv("not-a-port")
 
 	if err := run(context.Background(), getenv, discardLogger()); err == nil {
 		t.Fatal("run accepted an invalid PORT")
@@ -77,7 +89,7 @@ func TestRunFailsWhenPortIsTaken(t *testing.T) {
 	defer taken.Close()
 	_, port, _ := net.SplitHostPort(taken.Addr().String())
 
-	err = run(context.Background(), func(string) string { return port }, discardLogger())
+	err = run(context.Background(), portEnv(port), discardLogger())
 
 	if err == nil {
 		t.Fatal("run succeeded on a port that is already in use")
@@ -88,7 +100,7 @@ func TestRunServesOnConfiguredPort(t *testing.T) {
 	port := freePort(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- run(ctx, func(string) string { return port }, discardLogger()) }()
+	go func() { done <- run(ctx, portEnv(port), discardLogger()) }()
 
 	var resp *http.Response
 	var err error
@@ -153,5 +165,97 @@ func TestServeReturnsListenerFailure(t *testing.T) {
 
 	if err == nil {
 		t.Fatal("serve returned nil for a closed listener")
+	}
+}
+
+func writeIndex(t *testing.T, content string) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func TestStaticOptions(t *testing.T) {
+	t.Run("empty dir adds no options", func(t *testing.T) {
+		opts, err := staticOptions("")
+
+		if err != nil || len(opts) != 0 {
+			t.Errorf("staticOptions(\"\") = %v, %v; want no options and no error", opts, err)
+		}
+	})
+
+	t.Run("dir with index.html adds the static option", func(t *testing.T) {
+		opts, err := staticOptions(writeIndex(t, "<html></html>"))
+
+		if err != nil || len(opts) != 1 {
+			t.Errorf("staticOptions = %v, %v; want one option and no error", opts, err)
+		}
+	})
+
+	t.Run("dir without index.html is rejected", func(t *testing.T) {
+		if _, err := staticOptions(t.TempDir()); err == nil {
+			t.Error("staticOptions accepted a dir with no index.html")
+		}
+	})
+
+	t.Run("missing dir is rejected", func(t *testing.T) {
+		if _, err := staticOptions(filepath.Join(t.TempDir(), "absent")); err == nil {
+			t.Error("staticOptions accepted a dir that does not exist")
+		}
+	})
+}
+
+func TestRunRejectsInvalidStaticDir(t *testing.T) {
+	getenv := func(key string) string {
+		if key == "STATIC_DIR" {
+			return t.TempDir()
+		}
+		return ""
+	}
+
+	if err := run(context.Background(), getenv, discardLogger()); err == nil {
+		t.Fatal("run accepted a STATIC_DIR with no index.html")
+	}
+}
+
+func TestRunServesFrontendFromStaticDir(t *testing.T) {
+	port := freePort(t)
+	staticDir := writeIndex(t, "<html>calculator</html>")
+	getenv := func(key string) string {
+		switch key {
+		case "PORT":
+			return port
+		case "STATIC_DIR":
+			return staticDir
+		}
+		return ""
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, getenv, discardLogger()) }()
+
+	var body []byte
+	var err error
+	for range 50 {
+		var resp *http.Response
+		if resp, err = http.Get("http://127.0.0.1:" + port + "/"); err == nil {
+			body, _ = io.ReadAll(resp.Body)
+			resp.Body.Close()
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err != nil {
+		t.Fatalf("server never became reachable: %v", err)
+	}
+	if string(body) != "<html>calculator</html>" {
+		t.Errorf("GET / body = %q, want the index.html contents", body)
+	}
+
+	cancel()
+	if err := <-done; err != nil {
+		t.Errorf("run returned %v after shutdown, want nil", err)
 	}
 }

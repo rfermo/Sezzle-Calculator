@@ -1,15 +1,34 @@
 package api
 
 import (
+	"io/fs"
 	"log/slog"
 	"net/http"
 
 	"github.com/rfermo/sezzle-calculator/backend/internal/calculator"
 )
 
+// Option customises NewRouter.
+type Option func(*routerConfig)
+
+type routerConfig struct {
+	static http.Handler
+}
+
+// WithStaticFiles makes the router serve the files in fsys (the built frontend) for GET and HEAD
+// requests that match no API route. Unknown paths outside /api get fsys's index.html.
+func WithStaticFiles(fsys fs.FS) Option {
+	return func(c *routerConfig) { c.static = staticHandler(fsys) }
+}
+
 // NewRouter wires every route and the middleware stack. The logger is outermost so it also
 // records requests that panic (as the 500 produced by recoverer).
-func NewRouter(logger *slog.Logger) http.Handler {
+func NewRouter(logger *slog.Logger, opts ...Option) http.Handler {
+	var cfg routerConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handleHealth)
 	mux.HandleFunc("POST /api/v1/add", handleBinary(calculator.Add))
@@ -19,17 +38,24 @@ func NewRouter(logger *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/v1/power", handleBinary(calculator.Power))
 	mux.HandleFunc("POST /api/v1/sqrt", handleUnary(calculator.Sqrt))
 	mux.HandleFunc("POST /api/v1/percentage", handleBinary(calculator.Percentage))
-	return requestLogger(logger, recoverer(logger, jsonErrors(mux)))
+	return requestLogger(logger, recoverer(logger, jsonErrors(mux, cfg.static)))
 }
 
 // jsonErrors replaces the mux's plain-text 404 and 405 responses with the JSON error envelope.
 // The mux stays the source of truth for which of the two applies (and for the Allow header), so
 // this keeps working as routes are added.
-func jsonErrors(mux *http.ServeMux) http.Handler {
+//
+// static, when set, takes the page requests that match no route. It is a fallback here rather than
+// a "GET /" mux route because a catch-all would swallow the mux's 405s for wrong-method API calls.
+func jsonErrors(mux *http.ServeMux, static http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		handler, pattern := mux.Handler(r)
 		if pattern != "" {
 			handler.ServeHTTP(w, r)
+			return
+		}
+		if static != nil && isPageRequest(r) {
+			static.ServeHTTP(w, r)
 			return
 		}
 
