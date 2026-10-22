@@ -16,6 +16,11 @@ func Add(a, b float64) (float64, error) {
 	return requireFinite(a + b)
 }
 
+// Subtract returns a - b.
+func Subtract(a, b float64) (float64, error) {
+	return requireFinite(a - b)
+}
+
 func requireFinite(result float64) (float64, error) {
 	if math.IsNaN(result) || math.IsInf(result, 0) {
 		return 0, ErrResultNotFinite
