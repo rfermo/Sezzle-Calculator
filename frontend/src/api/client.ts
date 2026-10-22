@@ -84,3 +84,7 @@ export async function postOperation(operation: string, operands: Operands): Prom
   }
   return body.result
 }
+
+export function add(a: number, b: number): Promise<number> {
+  return postOperation('add', { a, b })
+}

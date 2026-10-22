@@ -19,6 +19,10 @@ const decimal: CalculatorAction = { type: 'decimal' }
 const clear: CalculatorAction = { type: 'clear' }
 const backspace: CalculatorAction = { type: 'backspace' }
 const toggleSign: CalculatorAction = { type: 'toggleSign' }
+const plus: CalculatorAction = { type: 'operator', operator: '+' }
+const equals: CalculatorAction = { type: 'equals' }
+const succeed = (result: number): CalculatorAction => ({ type: 'calculationSucceeded', result })
+const fail = (message: string): CalculatorAction => ({ type: 'calculationFailed', message })
 
 describe('calculatorReducer', () => {
   describe('digit entry', () => {
@@ -157,10 +161,183 @@ describe('calculatorReducer', () => {
     })
   })
 
-  it('does not mutate the previous state', () => {
-    const state = Object.freeze({ display: '12' })
+  describe('operator and equals', () => {
+    it('captures the entered number as the left operand when an operator is pressed', () => {
+      const state = run([...digits('2'), plus])
 
-    expect(calculatorReducer(state, { type: 'digit', digit: '3' })).toEqual({ display: '123' })
+      expect(state.pending).toEqual({ operator: '+', left: 2 })
+      expect(state.display).toBe('2')
+      expect(state.calculation).toBeNull()
+    })
+
+    it('starts a fresh number for the right operand', () => {
+      expect(run([...digits('2'), plus, ...digits('3')]).display).toBe('3')
+    })
+
+    it('requests a calculation on equals', () => {
+      const state = run([...digits('2'), plus, ...digits('3'), equals])
+
+      expect(state.calculation).toEqual({ operator: '+', left: 2, right: 3, next: null })
+    })
+
+    it('parses decimals and negatives in operands', () => {
+      const state = run([...digits('1'), decimal, ...digits('5'), plus, ...digits('3'), decimal, toggleSign, equals])
+
+      expect(state.calculation).toMatchObject({ left: 1.5, right: -3 })
+    })
+
+    it('shows the result and clears the pending operator when the calculation succeeds', () => {
+      const state = run([...digits('2'), plus, ...digits('3'), equals, succeed(5)])
+
+      expect(state).toEqual({ ...initialState, display: '5', entry: 'settled' })
+    })
+
+    it('formats the result for display', () => {
+      expect(run([...digits('1'), plus, ...digits('2'), equals, succeed(0.1 + 0.2)]).display).toBe('0.3')
+    })
+
+    it('ignores equals when there is no pending operator', () => {
+      expect(run([...digits('7'), equals])).toEqual(run(digits('7')))
+    })
+
+    it('ignores equals while the right operand is still missing', () => {
+      expect(run([...digits('7'), plus, equals]).calculation).toBeNull()
+    })
+
+    it('keeps the left operand when the operator is pressed again before an operand', () => {
+      const state = run([...digits('2'), plus, plus])
+
+      expect(state.pending).toEqual({ operator: '+', left: 2 })
+      expect(state.calculation).toBeNull()
+      expect(state.display).toBe('2')
+    })
+
+    describe('after a result', () => {
+      const afterResult = run([...digits('2'), plus, ...digits('3'), equals, succeed(5)])
+
+      it('starts a new number when a digit is typed', () => {
+        expect(run(digits('7'), afterResult).display).toBe('7')
+      })
+
+      it('starts a new decimal when the decimal point is typed', () => {
+        expect(run([decimal, ...digits('5')], afterResult).display).toBe('0.5')
+      })
+
+      it('uses the result as the left operand of the next operator', () => {
+        expect(run([plus], afterResult).pending).toEqual({ operator: '+', left: 5 })
+      })
+
+      it('lets the result be negated', () => {
+        expect(run([toggleSign], afterResult).display).toBe('-5')
+      })
+
+      it('does not edit the result with backspace', () => {
+        expect(run([backspace], afterResult).display).toBe('5')
+      })
+
+      it('does not repeat the previous calculation on a second equals', () => {
+        expect(run([equals], afterResult).calculation).toBeNull()
+      })
+    })
+
+    describe('while waiting for the right operand', () => {
+      const afterOperator = run([...digits('5'), plus])
+
+      it('ignores the sign toggle because there is no operand to negate yet', () => {
+        expect(run([toggleSign], afterOperator).display).toBe('5')
+      })
+
+      it('ignores backspace', () => {
+        expect(run([backspace], afterOperator).display).toBe('5')
+      })
+    })
+  })
+
+  describe('chaining', () => {
+    it('requests the pending calculation when a second operator is pressed', () => {
+      const state = run([...digits('1'), plus, ...digits('2'), plus])
+
+      expect(state.calculation).toEqual({ operator: '+', left: 1, right: 2, next: '+' })
+    })
+
+    it('continues from the result with the new operator pending', () => {
+      const state = run([...digits('1'), plus, ...digits('2'), plus, succeed(3)])
+
+      expect(state.display).toBe('3')
+      expect(state.pending).toEqual({ operator: '+', left: 3 })
+      expect(state.entry).toBe('settled')
+    })
+
+    it('evaluates 1 + 2 + 3 to 6', () => {
+      const state = run([
+        ...digits('1'),
+        plus,
+        ...digits('2'),
+        plus,
+        succeed(3),
+        ...digits('3'),
+        equals,
+      ])
+      expect(state.calculation).toEqual({ operator: '+', left: 3, right: 3, next: null })
+
+      expect(run([succeed(6)], state).display).toBe('6')
+    })
+
+    it('chains from the displayed (rounded) result rather than the raw one', () => {
+      const state = run([...digits('1'), plus, ...digits('2'), plus, succeed(0.1 + 0.2)])
+
+      expect(state.pending?.left).toBe(0.3)
+    })
+  })
+
+  describe('while a calculation is in flight', () => {
+    const inFlight = run([...digits('2'), plus, ...digits('3'), equals])
+
+    it('ignores key presses', () => {
+      const keys: CalculatorAction[] = [...digits('9'), decimal, backspace, toggleSign, plus, equals, clear]
+
+      for (const key of keys) {
+        expect(run([key], inFlight)).toBe(inFlight)
+      }
+    })
+
+    it('ignores an outcome when nothing is in flight', () => {
+      expect(run([succeed(5)])).toEqual(initialState)
+      expect(run([fail('boom')])).toEqual(initialState)
+    })
+  })
+
+  describe('errors', () => {
+    const failed = run([...digits('2'), plus, ...digits('3'), equals, fail('Could not reach the server.')])
+
+    it('records the message and stops waiting', () => {
+      expect(failed.error).toBe('Could not reach the server.')
+      expect(failed.calculation).toBeNull()
+    })
+
+    it('keeps the entered calculation so it can be retried', () => {
+      expect(failed.display).toBe('3')
+      expect(failed.pending).toEqual({ operator: '+', left: 2 })
+      expect(run([equals], failed).calculation).toEqual({ operator: '+', left: 2, right: 3, next: null })
+    })
+
+    it('clears the error on the next key press', () => {
+      expect(run(digits('4'), failed).error).toBeNull()
+    })
+
+    it('clears the error and the calculation on clear', () => {
+      expect(run([clear], failed)).toEqual(initialState)
+    })
+
+    it('clears the error when a retry succeeds', () => {
+      expect(run([equals, succeed(5)], failed)).toEqual({ ...initialState, display: '5', entry: 'settled' })
+    })
+  })
+
+  it('does not mutate the previous state', () => {
+    const state = Object.freeze({ ...initialState, display: '12' })
+
+    expect(calculatorReducer(state, { type: 'digit', digit: '3' }).display).toBe('123')
     expect(state.display).toBe('12')
   })
 })
