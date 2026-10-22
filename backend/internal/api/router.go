@@ -3,6 +3,8 @@ package api
 import (
 	"log/slog"
 	"net/http"
+
+	"github.com/rfermo/sezzle-calculator/backend/internal/calculator"
 )
 
 // NewRouter wires every route and the middleware stack. The logger is outermost so it also
@@ -10,6 +12,7 @@ import (
 func NewRouter(logger *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handleHealth)
+	mux.HandleFunc("POST /api/v1/add", handleBinary(calculator.Add))
 	return requestLogger(logger, recoverer(logger, jsonErrors(mux)))
 }
 

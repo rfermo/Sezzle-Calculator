@@ -8,11 +8,6 @@ import (
 	"testing"
 )
 
-type operandsRequest struct {
-	A *float64 `json:"a"`
-	B *float64 `json:"b"`
-}
-
 func jsonRequest(body, contentType string) *http.Request {
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
 	if contentType != "" {
