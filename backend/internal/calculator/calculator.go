@@ -16,6 +16,13 @@ func Add(a, b float64) (float64, error) {
 	return requireFinite(a + b)
 }
 
+// Power returns base raised to exp. It follows math.Pow, so 0^0 is 1. Results that overflow or are
+// undefined (e.g. a negative base with a fractional exponent) are reported as ErrResultNotFinite,
+// as is a zero base with a negative exponent, which math.Pow evaluates to +Inf.
+func Power(base, exp float64) (float64, error) {
+	return requireFinite(math.Pow(base, exp))
+}
+
 func requireFinite(result float64) (float64, error) {
 	if math.IsNaN(result) || math.IsInf(result, 0) {
 		return 0, ErrResultNotFinite

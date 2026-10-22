@@ -133,3 +133,85 @@ func TestHandleBinaryHidesUnexpectedErrors(t *testing.T) {
 		t.Errorf("message %q leaks the underlying error", detail.Message)
 	}
 }
+
+func TestPowerReturnsExponentiation(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want float64
+	}{
+		{"integers", `{"a": 2, "b": 10}`, 1024},
+		{"negative exponent", `{"a": 2, "b": -2}`, 0.25},
+		{"fractional exponent", `{"a": 9, "b": 0.5}`, 3},
+		{"zero exponent", `{"a": 5, "b": 0}`, 1},
+		{"zero to the zero is one", `{"a": 0, "b": 0}`, 1},
+		{"a is the base and b the exponent", `{"b": 3, "a": 2}`, 8},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := postJSON(NewRouter(discardLogger()), "/api/v1/power", tt.body)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200 (body %q)", rec.Code, rec.Body.String())
+			}
+			var body resultResponse
+			if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+				t.Fatalf("body is not a result response: %v", err)
+			}
+			if body.Result != tt.want {
+				t.Errorf("result = %v, want %v", body.Result, tt.want)
+			}
+		})
+	}
+}
+
+func TestPowerRejectsInvalidRequests(t *testing.T) {
+	tests := []struct {
+		name        string
+		body        string
+		wantMessage string
+	}{
+		{"missing a", `{"b": 3}`, `field "a" is required`},
+		{"missing b", `{"a": 2}`, `field "b" is required`},
+		{"string operand", `{"a": "2", "b": 3}`, `field "a" has an invalid type`},
+		{"unknown field", `{"a": 2, "b": 3, "c": 4}`, `unknown field "c"`},
+		{"malformed JSON", `{"a": 2,`, "request body is not valid JSON"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := postJSON(NewRouter(discardLogger()), "/api/v1/power", tt.body)
+
+			detail := assertErrorEnvelope(t, rec, http.StatusBadRequest, codeInvalidRequest)
+			if detail.Message != tt.wantMessage {
+				t.Errorf("message = %q, want %q", detail.Message, tt.wantMessage)
+			}
+		})
+	}
+}
+
+func TestPowerReportsNonFiniteResultsAsUnprocessable(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"overflow", `{"a": 10, "b": 400}`},
+		{"negative base with fractional exponent", `{"a": -8, "b": 0.5}`},
+		{"zero base with negative exponent", `{"a": 0, "b": -1}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := postJSON(NewRouter(discardLogger()), "/api/v1/power", tt.body)
+
+			assertErrorEnvelope(t, rec, http.StatusUnprocessableEntity, codeResultNotFinite)
+		})
+	}
+}
+
+func TestPowerRejectsWrongMethod(t *testing.T) {
+	rec := serveRequest(NewRouter(discardLogger()), http.MethodGet, "/api/v1/power")
+
+	assertErrorEnvelope(t, rec, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+	if allow := rec.Header().Get("Allow"); !strings.Contains(allow, http.MethodPost) {
+		t.Errorf("Allow = %q, want it to list POST", allow)
+	}
+}
