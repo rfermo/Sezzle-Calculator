@@ -21,6 +21,7 @@ const backspace: CalculatorAction = { type: 'backspace' }
 const toggleSign: CalculatorAction = { type: 'toggleSign' }
 const plus: CalculatorAction = { type: 'operator', operator: '+' }
 const equals: CalculatorAction = { type: 'equals' }
+const sqrt: CalculatorAction = { type: 'unary', operation: 'sqrt' }
 const succeed = (result: number): CalculatorAction => ({ type: 'calculationSucceeded', result })
 const fail = (message: string): CalculatorAction => ({ type: 'calculationFailed', message })
 
@@ -177,7 +178,7 @@ describe('calculatorReducer', () => {
     it('requests a calculation on equals', () => {
       const state = run([...digits('2'), plus, ...digits('3'), equals])
 
-      expect(state.calculation).toEqual({ operator: '+', left: 2, right: 3, next: null })
+      expect(state.calculation).toEqual({ kind: 'binary', operator: '+', left: 2, right: 3, next: null })
     })
 
     it('parses decimals and negatives in operands', () => {
@@ -257,7 +258,7 @@ describe('calculatorReducer', () => {
     it('requests the pending calculation when a second operator is pressed', () => {
       const state = run([...digits('1'), plus, ...digits('2'), plus])
 
-      expect(state.calculation).toEqual({ operator: '+', left: 1, right: 2, next: '+' })
+      expect(state.calculation).toEqual({ kind: 'binary', operator: '+', left: 1, right: 2, next: '+' })
     })
 
     it('continues from the result with the new operator pending', () => {
@@ -278,7 +279,7 @@ describe('calculatorReducer', () => {
         ...digits('3'),
         equals,
       ])
-      expect(state.calculation).toEqual({ operator: '+', left: 3, right: 3, next: null })
+      expect(state.calculation).toEqual({ kind: 'binary', operator: '+', left: 3, right: 3, next: null })
 
       expect(run([succeed(6)], state).display).toBe('6')
     })
@@ -290,11 +291,141 @@ describe('calculatorReducer', () => {
     })
   })
 
+  describe('unary operations', () => {
+    it('requests the operation on the displayed number immediately, without equals', () => {
+      const state = run([...digits('144'), sqrt])
+
+      expect(state.calculation).toEqual({ kind: 'unary', operation: 'sqrt', operand: 144 })
+    })
+
+    it('parses decimals and negatives in the operand', () => {
+      const state = run([...digits('2'), decimal, ...digits('5'), toggleSign, sqrt])
+
+      expect(state.calculation).toMatchObject({ operand: -2.5 })
+    })
+
+    it('applies to the initial zero', () => {
+      expect(run([sqrt]).calculation).toMatchObject({ operand: 0 })
+    })
+
+    it('applies to a previous result', () => {
+      const afterResult = run([...digits('2'), plus, ...digits('7'), equals, succeed(9)])
+
+      expect(run([sqrt], afterResult).calculation).toMatchObject({ operand: 9 })
+    })
+
+    it('shows the result and leaves nothing pending when used on its own', () => {
+      const state = run([...digits('144'), sqrt, succeed(12)])
+
+      expect(state).toEqual({ ...initialState, display: '12', entry: 'settled' })
+    })
+
+    it('formats the result for display', () => {
+      expect(run([...digits('2'), sqrt, succeed(Math.SQRT2 ** 2)]).display).toBe('2')
+    })
+
+    it('starts a new number when a digit is typed after the result', () => {
+      expect(run([...digits('144'), sqrt, succeed(12), ...digits('5')]).display).toBe('5')
+    })
+
+    it('uses the result as the left operand of the next binary operator', () => {
+      const state = run([...digits('144'), sqrt, succeed(12), plus])
+
+      expect(state.pending).toEqual({ operator: '+', left: 12 })
+    })
+
+    it('can be applied repeatedly', () => {
+      const state = run([...digits('16'), sqrt, succeed(4), sqrt])
+
+      expect(state.calculation).toEqual({ kind: 'unary', operation: 'sqrt', operand: 4 })
+    })
+
+    describe('mid-expression', () => {
+      const midExpression = run([...digits('9'), plus, ...digits('16'), sqrt])
+
+      it('operates on the right-hand operand and keeps the pending operator', () => {
+        expect(midExpression.calculation).toEqual({ kind: 'unary', operation: 'sqrt', operand: 16 })
+        expect(midExpression.pending).toEqual({ operator: '+', left: 9 })
+      })
+
+      it('replaces the right-hand operand with the result and keeps the pending operator', () => {
+        const state = run([succeed(4)], midExpression)
+
+        expect(state.display).toBe('4')
+        expect(state.pending).toEqual({ operator: '+', left: 9 })
+        expect(state.calculation).toBeNull()
+      })
+
+      it('lets equals use the result as the right-hand operand', () => {
+        const state = run([succeed(4), equals], midExpression)
+
+        expect(state.calculation).toEqual({ kind: 'binary', operator: '+', left: 9, right: 4, next: null })
+      })
+
+      it('lets a following operator chain from the result', () => {
+        const state = run([succeed(4), plus], midExpression)
+
+        expect(state.calculation).toEqual({ kind: 'binary', operator: '+', left: 9, right: 4, next: '+' })
+      })
+
+      it('starts a new right-hand operand when a digit is typed after the result', () => {
+        const state = run([succeed(4), ...digits('7'), equals], midExpression)
+
+        expect(state.calculation).toMatchObject({ left: 9, right: 7 })
+      })
+
+      it('does not edit the result with backspace', () => {
+        expect(run([succeed(4), backspace], midExpression).display).toBe('4')
+      })
+
+      it('lets the result be negated before equals', () => {
+        const state = run([succeed(4), toggleSign, equals], midExpression)
+
+        expect(state.calculation).toMatchObject({ left: 9, right: -4 })
+      })
+
+      it('operates on the shown left operand when no right-hand operand has been entered yet', () => {
+        const state = run([...digits('9'), plus, sqrt])
+
+        expect(state.calculation).toEqual({ kind: 'unary', operation: 'sqrt', operand: 9 })
+        expect(run([succeed(3), equals], state).calculation).toMatchObject({ left: 9, right: 3 })
+      })
+    })
+
+    describe('when the request fails', () => {
+      const failed = run([...digits('4'), toggleSign, sqrt, fail('Cannot take the square root of a negative number')])
+
+      it('shows the message and keeps the entered number', () => {
+        expect(failed.error).toBe('Cannot take the square root of a negative number')
+        expect(failed.display).toBe('-4')
+        expect(failed.calculation).toBeNull()
+      })
+
+      it('lets the entry be corrected, which dismisses the error', () => {
+        const state = run([toggleSign, sqrt], failed)
+
+        expect(state.error).toBeNull()
+        expect(state.calculation).toEqual({ kind: 'unary', operation: 'sqrt', operand: 4 })
+      })
+
+      it('keeps the pending operator so the expression survives the error', () => {
+        const state = run([...digits('9'), plus, ...digits('4'), toggleSign, sqrt, fail('boom')])
+
+        expect(state.pending).toEqual({ operator: '+', left: 9 })
+        expect(state.display).toBe('-4')
+      })
+
+      it('is cleared by the clear key', () => {
+        expect(run([clear], failed)).toEqual(initialState)
+      })
+    })
+  })
+
   describe('while a calculation is in flight', () => {
     const inFlight = run([...digits('2'), plus, ...digits('3'), equals])
 
     it('ignores key presses', () => {
-      const keys: CalculatorAction[] = [...digits('9'), decimal, backspace, toggleSign, plus, equals, clear]
+      const keys: CalculatorAction[] = [...digits('9'), decimal, backspace, toggleSign, plus, sqrt, equals, clear]
 
       for (const key of keys) {
         expect(run([key], inFlight)).toBe(inFlight)
@@ -318,7 +449,13 @@ describe('calculatorReducer', () => {
     it('keeps the entered calculation so it can be retried', () => {
       expect(failed.display).toBe('3')
       expect(failed.pending).toEqual({ operator: '+', left: 2 })
-      expect(run([equals], failed).calculation).toEqual({ operator: '+', left: 2, right: 3, next: null })
+      expect(run([equals], failed).calculation).toEqual({
+        kind: 'binary',
+        operator: '+',
+        left: 2,
+        right: 3,
+        next: null,
+      })
     })
 
     it('clears the error on the next key press', () => {

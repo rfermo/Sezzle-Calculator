@@ -32,7 +32,7 @@ describe('App', () => {
   it('exposes every key as a button reachable by its label', () => {
     render(<App />)
 
-    const labels = [...'0123456789', 'Decimal point', 'Clear', 'Backspace', 'Toggle sign', 'Add', 'Equals']
+    const labels = [...'0123456789', 'Decimal point', 'Clear', 'Backspace', 'Toggle sign', 'Add', 'Square root', 'Equals']
     for (const label of labels) {
       expect(screen.getByRole('button', { name: label })).toBeEnabled()
     }
@@ -199,6 +199,88 @@ describe('App', () => {
 
       expect(screen.queryByRole('alert')).not.toBeInTheDocument()
       expect(display()).toHaveTextContent(/^0$/)
+    })
+  })
+
+  describe('square root', () => {
+    it('applies immediately to the displayed number, without equals', async () => {
+      fetchMock.mockResolvedValue(jsonResponse({ result: 12 }))
+      render(<App />)
+
+      press('1', '4', '4', 'Square root')
+
+      await waitFor(() => expect(display()).toHaveTextContent(/^12$/))
+      expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+        '/api/v1/sqrt',
+        expect.objectContaining({ method: 'POST', body: '{"a":144}' }),
+      )
+    })
+
+    it('operates on the right-hand operand mid-expression and keeps the expression going', async () => {
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse({ result: 4 }))
+        .mockResolvedValueOnce(jsonResponse({ result: 13 }))
+      render(<App />)
+
+      press('9', 'Add', '1', '6', 'Square root')
+      await waitFor(() => expect(display()).toHaveTextContent(/^4$/))
+      press('Equals')
+
+      await waitFor(() => expect(display()).toHaveTextContent(/^13$/))
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        1,
+        '/api/v1/sqrt',
+        expect.objectContaining({ body: '{"a":16}' }),
+      )
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        2,
+        '/api/v1/add',
+        expect.objectContaining({ body: '{"a":9,"b":4}' }),
+      )
+    })
+
+    it('shows the backend message in an alert for a negative number', async () => {
+      fetchMock.mockResolvedValue(
+        jsonResponse(
+          { error: { code: 'negative_square_root', message: 'Cannot take the square root of a negative number' } },
+          422,
+        ),
+      )
+      render(<App />)
+
+      press('4', 'Toggle sign', 'Square root')
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Cannot take the square root of a negative number')
+      expect(display()).toHaveTextContent(/^-4$/)
+      expect(screen.getByRole('button', { name: 'Square root' })).toBeEnabled()
+    })
+
+    it('recovers from the error by correcting the number', async () => {
+      fetchMock
+        .mockResolvedValueOnce(
+          jsonResponse({ error: { code: 'negative_square_root', message: 'negative' } }, 422),
+        )
+        .mockResolvedValueOnce(jsonResponse({ result: 2 }))
+      render(<App />)
+
+      press('4', 'Toggle sign', 'Square root')
+      await screen.findByRole('alert')
+      press('Toggle sign')
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      press('Square root')
+      await waitFor(() => expect(display()).toHaveTextContent(/^2$/))
+    })
+
+    it('disables every key while the request is pending', () => {
+      fetchMock.mockReturnValue(new Promise<Response>(() => {}))
+      render(<App />)
+
+      press('9', 'Square root')
+
+      for (const button of screen.getAllByRole('button')) {
+        expect(button).toBeDisabled()
+      }
     })
   })
 })
