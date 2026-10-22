@@ -32,7 +32,7 @@ describe('App', () => {
   it('exposes every key as a button reachable by its label', () => {
     render(<App />)
 
-    const labels = [...'0123456789', 'Decimal point', 'Clear', 'Backspace', 'Toggle sign', 'Add', 'Subtract', 'Multiply', 'Divide', 'Equals']
+    const labels = [...'0123456789', 'Decimal point', 'Clear', 'Backspace', 'Toggle sign', 'Add', 'Subtract', 'Multiply', 'Divide', 'Power', 'Equals']
     for (const label of labels) {
       expect(screen.getByRole('button', { name: label })).toBeEnabled()
     }
@@ -358,6 +358,41 @@ describe('App', () => {
       expect(screen.queryByRole('alert')).not.toBeInTheDocument()
       expect(display()).toHaveTextContent(/^0$/)
       expect(screen.getByRole('button', { name: 'Equals' })).toBeEnabled()
+    })
+  })
+
+  describe('exponentiation', () => {
+    it('sends the base and exponent to the power endpoint and shows the result', async () => {
+      fetchMock.mockResolvedValue(jsonResponse({ result: 1024 }))
+      render(<App />)
+
+      press('2', 'Power', '1', '0', 'Equals')
+
+      await waitFor(() => expect(display()).toHaveTextContent(/^1024$/))
+      expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+        '/api/v1/power',
+        expect.objectContaining({ method: 'POST', body: '{"a":2,"b":10}' }),
+      )
+    })
+
+    it('shows the backend message when the result is not a finite number', async () => {
+      fetchMock.mockResolvedValue(
+        jsonResponse({ error: { code: 'result_not_finite', message: 'result is not a finite number' } }, 422),
+      )
+      render(<App />)
+
+      press('8', 'Toggle sign', 'Power', 'Decimal point', '5', 'Equals')
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('result is not a finite number')
+      expect(fetchMock).toHaveBeenCalledWith('/api/v1/power', expect.objectContaining({ body: '{"a":-8,"b":0.5}' }))
+    })
+
+    it('does not call the API until equals is pressed', () => {
+      render(<App />)
+
+      press('2', 'Power', '3')
+
+      expect(fetchMock).not.toHaveBeenCalled()
     })
   })
 })

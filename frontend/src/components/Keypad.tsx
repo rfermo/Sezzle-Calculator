@@ -46,6 +46,15 @@ function Keypad({ onAction, disabled = false }: KeypadProps) {
 
   return (
     <div className="keypad" role="group" aria-label="Keypad">
+      <div className="keypad-extra">
+        <Key
+          label="xʸ"
+          accessibleName="Power"
+          className="key-operator"
+          disabled={disabled}
+          onPress={() => onAction({ type: 'operator', operator: 'xʸ' })}
+        />
+      </div>
       <div className="keypad-main">
         <Key
           label="C"

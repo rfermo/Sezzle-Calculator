@@ -100,3 +100,8 @@ export function multiply(a: number, b: number): Promise<number> {
 export function divide(a: number, b: number): Promise<number> {
   return postOperation('divide', { a, b })
 }
+
+/** Raises `base` to the power `exp`. */
+export function power(base: number, exp: number): Promise<number> {
+  return postOperation('power', { a: base, b: exp })
+}

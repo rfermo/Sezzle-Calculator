@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react'
-import { add, ApiError, divide, multiply, subtract } from '../api/client'
+import { add, ApiError, divide, multiply, power, subtract } from '../api/client'
 import type { CalculatorAction, Digit } from './calculatorReducer'
 import { useCalculator } from './useCalculator'
 
@@ -9,18 +9,21 @@ vi.mock('../api/client', async (importOriginal) => ({
   subtract: vi.fn(),
   multiply: vi.fn(),
   divide: vi.fn(),
+  power: vi.fn(),
 }))
 
 const addMock = vi.mocked(add)
 const subtractMock = vi.mocked(subtract)
 const multiplyMock = vi.mocked(multiply)
 const divideMock = vi.mocked(divide)
+const powerMock = vi.mocked(power)
 
 const digit = (value: Digit): CalculatorAction => ({ type: 'digit', digit: value })
 const plus: CalculatorAction = { type: 'operator', operator: '+' }
 const minus: CalculatorAction = { type: 'operator', operator: '−' }
 const times: CalculatorAction = { type: 'operator', operator: '×' }
 const dividedBy: CalculatorAction = { type: 'operator', operator: '÷' }
+const raisedTo: CalculatorAction = { type: 'operator', operator: 'xʸ' }
 const equals: CalculatorAction = { type: 'equals' }
 
 function deferred<T>() {
@@ -49,6 +52,27 @@ describe('useCalculator', () => {
     subtractMock.mockReset()
     multiplyMock.mockReset()
     divideMock.mockReset()
+    powerMock.mockReset()
+  })
+
+  it('calls power, not add, with the base and exponent for the power operator', async () => {
+    powerMock.mockResolvedValue(1024)
+    const { result, press } = setup()
+
+    await press(digit('2'), raisedTo, digit('1'), digit('0'), equals)
+
+    expect(powerMock).toHaveBeenCalledExactlyOnceWith(2, 10)
+    expect(addMock).not.toHaveBeenCalled()
+    expect(result.current.display).toBe('1024')
+  })
+
+  it('exposes the message when power has no finite result', async () => {
+    powerMock.mockRejectedValue(new ApiError('result_not_finite', 'result is not a finite number'))
+    const { result, press } = setup()
+
+    await press(digit('0'), raisedTo, digit('1'), { type: 'toggleSign' }, equals)
+
+    expect(result.current).toMatchObject({ error: 'result is not a finite number', display: '-1' })
   })
 
   it('starts idle on zero', () => {

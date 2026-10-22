@@ -23,6 +23,7 @@ const plus: CalculatorAction = { type: 'operator', operator: '+' }
 const minus: CalculatorAction = { type: 'operator', operator: '−' }
 const times: CalculatorAction = { type: 'operator', operator: '×' }
 const dividedBy: CalculatorAction = { type: 'operator', operator: '÷' }
+const raisedTo: CalculatorAction = { type: 'operator', operator: 'xʸ' }
 const equals: CalculatorAction = { type: 'equals' }
 const succeed = (result: number): CalculatorAction => ({ type: 'calculationSucceeded', result })
 const fail = (message: string): CalculatorAction => ({ type: 'calculationFailed', message })
@@ -409,6 +410,75 @@ describe('calculatorReducer', () => {
       const state = run([...digits('1'), dividedBy, ...digits('0'), equals])
 
       expect(state.calculation).toEqual({ operator: '÷', left: 1, right: 0, next: null })
+    })
+  })
+
+  describe('power', () => {
+    it('captures the base as the left operand', () => {
+      expect(run([...digits('2'), raisedTo]).pending).toEqual({ operator: 'xʸ', left: 2 })
+    })
+
+    it('requests a calculation with the base on the left and the exponent on the right', () => {
+      const state = run([...digits('2'), raisedTo, ...digits('10'), equals])
+
+      expect(state.calculation).toEqual({ operator: 'xʸ', left: 2, right: 10, next: null })
+    })
+
+    it('accepts a negative or fractional exponent', () => {
+      const state = run([...digits('2'), raisedTo, ...digits('1'), toggleSign, decimal, ...digits('5'), equals])
+
+      expect(state.calculation).toMatchObject({ left: 2, right: -1.5 })
+    })
+
+    it('shows the result and clears the pending operator when the calculation succeeds', () => {
+      const state = run([...digits('2'), raisedTo, ...digits('10'), equals, succeed(1024)])
+
+      expect(state).toEqual({ ...initialState, display: '1024', entry: 'settled' })
+    })
+
+    it('replaces a pending addition when pressed before the right operand', () => {
+      const state = run([...digits('2'), plus, raisedTo])
+
+      expect(state.pending).toEqual({ operator: 'xʸ', left: 2 })
+      expect(state.calculation).toBeNull()
+    })
+
+    it('is replaced by addition when pressed before the right operand', () => {
+      expect(run([...digits('2'), raisedTo, plus]).pending).toEqual({ operator: '+', left: 2 })
+    })
+
+    it('evaluates the pending power before moving on to another operator', () => {
+      const state = run([...digits('2'), raisedTo, ...digits('3'), plus])
+
+      expect(state.calculation).toEqual({ operator: 'xʸ', left: 2, right: 3, next: '+' })
+    })
+
+    it('evaluates the pending addition before moving on to a power', () => {
+      const state = run([...digits('2'), plus, ...digits('3'), raisedTo])
+
+      expect(state.calculation).toEqual({ operator: '+', left: 2, right: 3, next: 'xʸ' })
+    })
+
+    it('continues from the result with a chained power pending', () => {
+      const state = run([...digits('2'), raisedTo, ...digits('3'), raisedTo, succeed(8)])
+
+      expect(state.pending).toEqual({ operator: 'xʸ', left: 8 })
+      expect(state.display).toBe('8')
+    })
+
+    it('keeps the calculation so it can be retried after a domain error', () => {
+      const failed = run([
+        ...digits('8'),
+        toggleSign,
+        raisedTo,
+        decimal,
+        ...digits('5'),
+        equals,
+        fail('result is not a finite number'),
+      ])
+
+      expect(failed.error).toBe('result is not a finite number')
+      expect(run([equals], failed).calculation).toEqual({ operator: 'xʸ', left: -8, right: 0.5, next: null })
     })
   })
 

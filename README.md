@@ -106,3 +106,33 @@ curl -X POST http://localhost:8080/api/v1/divide \
 ```
 
 A quotient that overflows a 64-bit float (e.g. `1.7976931348623157e308 / 0.5`) fails with `422 result_not_finite`.
+
+### `POST /api/v1/power`
+
+Returns `a` raised to the power `b` (`a` is the base, `b` the exponent). Both fields are required numbers.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/power \
+  -H 'Content-Type: application/json' \
+  -d '{"a": 2, "b": 10}'
+```
+
+```json
+{"result": 1024}
+```
+
+Negative and fractional exponents work (`{"a": 2, "b": -2}` returns `0.25`), and `0^0` is `1`, matching Go's `math.Pow`. Inputs with no finite answer fail with `422 result_not_finite`:
+
+- the result overflows a 64-bit float (`10^400`)
+- a negative base with a fractional exponent, which has no real result (`(-8)^0.5`)
+- a zero base with a negative exponent, which is a division by zero in disguise (`0^-1`)
+
+```bash
+curl -X POST http://localhost:8080/api/v1/power \
+  -H 'Content-Type: application/json' \
+  -d '{"a": -8, "b": 0.5}'
+```
+
+```json
+{"error": {"code": "result_not_finite", "message": "result is not a finite number"}}
+```
