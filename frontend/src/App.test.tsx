@@ -32,7 +32,7 @@ describe('App', () => {
   it('exposes every key as a button reachable by its label', () => {
     render(<App />)
 
-    const labels = [...'0123456789', 'Decimal point', 'Clear', 'Backspace', 'Toggle sign', 'Add', 'Subtract', 'Multiply', 'Divide', 'Power', 'Square root', 'Equals']
+    const labels = [...'0123456789', 'Decimal point', 'Clear', 'Backspace', 'Toggle sign', 'Add', 'Subtract', 'Multiply', 'Divide', 'Power', 'Square root', 'Percentage', 'Equals']
     for (const label of labels) {
       expect(screen.getByRole('button', { name: label })).toBeEnabled()
     }
@@ -391,6 +391,40 @@ describe('App', () => {
       render(<App />)
 
       press('2', 'Power', '3')
+
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('percentage', () => {
+    it('sends the percent first and shows the percent of the second operand', async () => {
+      fetchMock.mockResolvedValue(jsonResponse({ result: 30 }))
+      render(<App />)
+
+      press('1', '5', 'Percentage', '2', '0', '0', 'Equals')
+
+      await waitFor(() => expect(display()).toHaveTextContent(/^30$/))
+      expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+        '/api/v1/percentage',
+        expect.objectContaining({ method: 'POST', body: '{"a":15,"b":200}' }),
+      )
+    })
+
+    it('shows the backend message when the result is not a finite number', async () => {
+      fetchMock.mockResolvedValue(
+        jsonResponse({ error: { code: 'result_not_finite', message: 'result is not a finite number' } }, 422),
+      )
+      render(<App />)
+
+      press('1', 'Percentage', '2', 'Equals')
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('result is not a finite number')
+    })
+
+    it('does not call the API until equals is pressed', () => {
+      render(<App />)
+
+      press('1', '5', 'Percentage', '2', '0', '0')
 
       expect(fetchMock).not.toHaveBeenCalled()
     })

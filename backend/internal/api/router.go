@@ -18,6 +18,7 @@ func NewRouter(logger *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/v1/divide", handleBinary(calculator.Divide))
 	mux.HandleFunc("POST /api/v1/power", handleBinary(calculator.Power))
 	mux.HandleFunc("POST /api/v1/sqrt", handleUnary(calculator.Sqrt))
+	mux.HandleFunc("POST /api/v1/percentage", handleBinary(calculator.Percentage))
 	return requestLogger(logger, recoverer(logger, jsonErrors(mux)))
 }
 

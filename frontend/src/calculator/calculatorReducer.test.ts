@@ -24,6 +24,7 @@ const minus: CalculatorAction = { type: 'operator', operator: '−' }
 const times: CalculatorAction = { type: 'operator', operator: '×' }
 const dividedBy: CalculatorAction = { type: 'operator', operator: '÷' }
 const raisedTo: CalculatorAction = { type: 'operator', operator: 'xʸ' }
+const percent: CalculatorAction = { type: 'operator', operator: '%' }
 const equals: CalculatorAction = { type: 'equals' }
 const sqrt: CalculatorAction = { type: 'unary', operation: 'sqrt' }
 const succeed = (result: number): CalculatorAction => ({ type: 'calculationSucceeded', result })
@@ -480,6 +481,47 @@ describe('calculatorReducer', () => {
 
       expect(failed.error).toBe('result is not a finite number')
       expect(run([equals], failed).calculation).toEqual({ kind: 'binary', operator: 'xʸ', left: -8, right: 0.5, next: null })
+    })
+  })
+
+  describe('percentage', () => {
+    it('captures the entered number as the percent when the key is pressed', () => {
+      const state = run([...digits('15'), percent])
+
+      expect(state.pending).toEqual({ operator: '%', left: 15 })
+      expect(state.entry).toBe('settled')
+    })
+
+    it('requests a calculation with the percent on the left and the amount on the right', () => {
+      const state = run([...digits('15'), percent, ...digits('200'), equals])
+
+      expect(state.calculation).toEqual({ kind: 'binary', operator: '%', left: 15, right: 200, next: null })
+    })
+
+    it('shows the result and clears the pending operator when the calculation succeeds', () => {
+      const state = run([...digits('15'), percent, ...digits('200'), equals, succeed(30)])
+
+      expect(state).toEqual({ ...initialState, display: '30', entry: 'settled' })
+    })
+
+    it('replaces a pending addition when pressed before the right operand', () => {
+      const state = run([...digits('15'), plus, percent])
+
+      expect(state.pending).toEqual({ operator: '%', left: 15 })
+      expect(state.calculation).toBeNull()
+    })
+
+    it('evaluates the pending percentage before moving on to another operator', () => {
+      const state = run([...digits('15'), percent, ...digits('200'), plus])
+
+      expect(state.calculation).toEqual({ kind: 'binary', operator: '%', left: 15, right: 200, next: '+' })
+      expect(run([succeed(30)], state).pending).toEqual({ operator: '+', left: 30 })
+    })
+
+    it('evaluates the pending addition before moving on to a percentage', () => {
+      const state = run([...digits('1'), plus, ...digits('2'), percent])
+
+      expect(state.calculation).toEqual({ kind: 'binary', operator: '+', left: 1, right: 2, next: '%' })
     })
   })
 

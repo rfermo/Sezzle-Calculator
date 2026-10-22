@@ -1,5 +1,5 @@
 import { useEffect, useReducer } from 'react'
-import { add, ApiError, divide, multiply, power, sqrt, subtract } from '../api/client'
+import { add, ApiError, divide, multiply, percentage, power, sqrt, subtract } from '../api/client'
 import {
   calculatorReducer,
   initialState,
@@ -14,6 +14,7 @@ const BINARY_OPERATIONS: Record<Operator, (a: number, b: number) => Promise<numb
   '×': multiply,
   '÷': divide,
   'xʸ': power,
+  '%': percentage,
 }
 
 const UNARY_OPERATIONS: Record<UnaryOperation, (a: number) => Promise<number>> = {

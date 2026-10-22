@@ -109,3 +109,8 @@ export function power(base: number, exp: number): Promise<number> {
 export function sqrt(a: number): Promise<number> {
   return postOperation('sqrt', { a })
 }
+
+/** `a` percent of `b`, so `percentage(15, 200)` is 30. */
+export function percentage(a: number, b: number): Promise<number> {
+  return postOperation('percentage', { a, b })
+}

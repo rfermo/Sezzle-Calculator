@@ -26,7 +26,7 @@ func postJSON(handler http.Handler, target, body string) *httptest.ResponseRecor
 
 // binaryEndpoints are the routes served by handleBinary. Request validation is shared, so its
 // tests run against each of them to catch an operation wired up without it.
-var binaryEndpoints = []string{"add", "subtract", "multiply", "divide"}
+var binaryEndpoints = []string{"add", "subtract", "multiply", "divide", "percentage"}
 
 func assertResult(t *testing.T, handler http.Handler, target, body string, want float64) {
 	t.Helper()
@@ -227,6 +227,34 @@ func TestDivideReportsDivisionByZeroAsUnprocessable(t *testing.T) {
 
 func TestDivideReportsOverflowAsUnprocessable(t *testing.T) {
 	rec := postJSON(NewRouter(discardLogger()), "/api/v1/divide", `{"a": 1.7976931348623157e308, "b": 0.5}`)
+
+	assertErrorEnvelope(t, rec, http.StatusUnprocessableEntity, codeResultNotFinite)
+}
+
+func TestPercentageReturnsPercentOfSecondOperand(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want float64
+	}{
+		{"percent of a whole number", `{"a": 15, "b": 200}`, 30},
+		{"operand order matters", `{"a": 200, "b": 15}`, 30},
+		{"over one hundred percent", `{"a": 150, "b": 80}`, 120},
+		{"negative percent", `{"a": -10, "b": 50}`, -5},
+		{"decimals", `{"a": 12.5, "b": 80}`, 10},
+		{"zero percent", `{"a": 0, "b": 200}`, 0},
+		{"field order does not matter", `{"b": 200, "a": 15}`, 30},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertResult(t, NewRouter(discardLogger()), "/api/v1/percentage", tt.body, tt.want)
+		})
+	}
+}
+
+func TestPercentageReportsOverflowAsUnprocessable(t *testing.T) {
+	rec := postJSON(NewRouter(discardLogger()), "/api/v1/percentage",
+		`{"a": 1.7976931348623157e308, "b": 1.7976931348623157e308}`)
 
 	assertErrorEnvelope(t, rec, http.StatusUnprocessableEntity, codeResultNotFinite)
 }

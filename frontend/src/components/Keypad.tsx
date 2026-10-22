@@ -61,6 +61,13 @@ function Keypad({ onAction, disabled = false }: KeypadProps) {
           disabled={disabled}
           onPress={() => onAction({ type: 'unary', operation: 'sqrt' })}
         />
+        <Key
+          label="%"
+          accessibleName="Percentage"
+          className="key-operator"
+          disabled={disabled}
+          onPress={() => onAction({ type: 'operator', operator: '%' })}
+        />
       </div>
       <div className="keypad-main">
         <Key

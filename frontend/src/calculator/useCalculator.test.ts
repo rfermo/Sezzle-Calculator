@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react'
-import { add, ApiError, divide, multiply, power, sqrt, subtract } from '../api/client'
+import { add, ApiError, divide, multiply, percentage, power, sqrt, subtract } from '../api/client'
 import type { CalculatorAction, Digit } from './calculatorReducer'
 import { useCalculator } from './useCalculator'
 
@@ -11,6 +11,7 @@ vi.mock('../api/client', async (importOriginal) => ({
   divide: vi.fn(),
   power: vi.fn(),
   sqrt: vi.fn(),
+  percentage: vi.fn(),
 }))
 
 const addMock = vi.mocked(add)
@@ -19,6 +20,7 @@ const multiplyMock = vi.mocked(multiply)
 const divideMock = vi.mocked(divide)
 const powerMock = vi.mocked(power)
 const sqrtMock = vi.mocked(sqrt)
+const percentageMock = vi.mocked(percentage)
 
 const digit = (value: Digit): CalculatorAction => ({ type: 'digit', digit: value })
 const plus: CalculatorAction = { type: 'operator', operator: '+' }
@@ -26,6 +28,7 @@ const minus: CalculatorAction = { type: 'operator', operator: '−' }
 const times: CalculatorAction = { type: 'operator', operator: '×' }
 const dividedBy: CalculatorAction = { type: 'operator', operator: '÷' }
 const raisedTo: CalculatorAction = { type: 'operator', operator: 'xʸ' }
+const percent: CalculatorAction = { type: 'operator', operator: '%' }
 const equals: CalculatorAction = { type: 'equals' }
 const squareRoot: CalculatorAction = { type: 'unary', operation: 'sqrt' }
 
@@ -57,6 +60,18 @@ describe('useCalculator', () => {
     divideMock.mockReset()
     powerMock.mockReset()
     sqrtMock.mockReset()
+    percentageMock.mockReset()
+  })
+
+  it('calls percentage, not add, with the percent and the amount for the percent operator', async () => {
+    percentageMock.mockResolvedValue(30)
+    const { result, press } = setup()
+
+    await press(digit('1'), digit('5'), percent, digit('2'), digit('0'), digit('0'), equals)
+
+    expect(percentageMock).toHaveBeenCalledExactlyOnceWith(15, 200)
+    expect(addMock).not.toHaveBeenCalled()
+    expect(result.current.display).toBe('30')
   })
 
   it('calls power, not add, with the base and exponent for the power operator', async () => {
