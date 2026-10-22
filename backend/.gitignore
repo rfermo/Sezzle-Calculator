@@ -1,0 +1,6 @@
+# Build output
+/bin/
+
+# Coverage output
+coverage.out
+coverage.html
