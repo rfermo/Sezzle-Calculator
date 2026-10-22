@@ -20,6 +20,7 @@ const clear: CalculatorAction = { type: 'clear' }
 const backspace: CalculatorAction = { type: 'backspace' }
 const toggleSign: CalculatorAction = { type: 'toggleSign' }
 const plus: CalculatorAction = { type: 'operator', operator: '+' }
+const divide: CalculatorAction = { type: 'operator', operator: '÷' }
 const equals: CalculatorAction = { type: 'equals' }
 const succeed = (result: number): CalculatorAction => ({ type: 'calculationSucceeded', result })
 const fail = (message: string): CalculatorAction => ({ type: 'calculationFailed', message })
@@ -287,6 +288,38 @@ describe('calculatorReducer', () => {
       const state = run([...digits('1'), plus, ...digits('2'), plus, succeed(0.1 + 0.2)])
 
       expect(state.pending?.left).toBe(0.3)
+    })
+  })
+
+  describe('division', () => {
+    it('captures the left operand with the divide operator pending', () => {
+      expect(run([...digits('8'), divide]).pending).toEqual({ operator: '÷', left: 8 })
+    })
+
+    it('requests a division on equals', () => {
+      const state = run([...digits('1'), divide, ...digits('4'), equals])
+
+      expect(state.calculation).toEqual({ operator: '÷', left: 1, right: 4, next: null })
+    })
+
+    it('replaces a pending operator with divide before an operand is entered', () => {
+      const state = run([...digits('6'), plus, divide])
+
+      expect(state.pending).toEqual({ operator: '÷', left: 6 })
+      expect(state.calculation).toBeNull()
+    })
+
+    it('chains into a division, leaving divide pending after the previous step', () => {
+      const state = run([...digits('6'), plus, ...digits('2'), divide])
+
+      expect(state.calculation).toEqual({ operator: '+', left: 6, right: 2, next: '÷' })
+      expect(run([succeed(8)], state).pending).toEqual({ operator: '÷', left: 8 })
+    })
+
+    it('sends a zero divisor to the API rather than judging it locally', () => {
+      const state = run([...digits('1'), divide, ...digits('0'), equals])
+
+      expect(state.calculation).toEqual({ operator: '÷', left: 1, right: 0, next: null })
     })
   })
 

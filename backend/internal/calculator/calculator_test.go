@@ -42,3 +42,43 @@ func TestAdd(t *testing.T) {
 		})
 	}
 }
+
+func TestDivide(t *testing.T) {
+	negativeZero := math.Copysign(0, -1)
+	tests := []struct {
+		name    string
+		a, b    float64
+		want    float64
+		wantErr error
+	}{
+		{"exact quotient", 6, 3, 2, nil},
+		{"fractional result", 1, 4, 0.25, nil},
+		{"negative dividend", -6, 3, -2, nil},
+		{"negative divisor", 6, -3, -2, nil},
+		{"two negatives", -6, -3, 2, nil},
+		{"decimal operands", 7.5, 2.5, 3, nil},
+		{"zero dividend", 0, 5, 0, nil},
+		{"dividing by one", 4.5, 1, 4.5, nil},
+		{"zero divisor", 5, 0, 0, ErrDivisionByZero},
+		{"negative zero divisor", 5, negativeZero, 0, ErrDivisionByZero},
+		{"zero divided by zero", 0, 0, 0, ErrDivisionByZero},
+		{"zero divided by negative zero", 0, negativeZero, 0, ErrDivisionByZero},
+		{"infinite dividend by zero reports the zero divisor", math.Inf(1), 0, 0, ErrDivisionByZero},
+		{"overflow", math.MaxFloat64, 0.5, 0, ErrResultNotFinite},
+		{"negative overflow", -math.MaxFloat64, 0.5, 0, ErrResultNotFinite},
+		{"infinity over infinity is NaN", math.Inf(1), math.Inf(1), 0, ErrResultNotFinite},
+		{"NaN operand", math.NaN(), 1, 0, ErrResultNotFinite},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Divide(tt.a, tt.b)
+
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("Divide(%v, %v) error = %v, want %v", tt.a, tt.b, err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Errorf("Divide(%v, %v) = %v, want %v", tt.a, tt.b, got, tt.want)
+			}
+		})
+	}
+}

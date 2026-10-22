@@ -13,6 +13,7 @@ func NewRouter(logger *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handleHealth)
 	mux.HandleFunc("POST /api/v1/add", handleBinary(calculator.Add))
+	mux.HandleFunc("POST /api/v1/divide", handleBinary(calculator.Divide))
 	return requestLogger(logger, recoverer(logger, jsonErrors(mux)))
 }
 

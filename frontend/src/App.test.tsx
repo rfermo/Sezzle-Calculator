@@ -32,7 +32,7 @@ describe('App', () => {
   it('exposes every key as a button reachable by its label', () => {
     render(<App />)
 
-    const labels = [...'0123456789', 'Decimal point', 'Clear', 'Backspace', 'Toggle sign', 'Add', 'Equals']
+    const labels = [...'0123456789', 'Decimal point', 'Clear', 'Backspace', 'Toggle sign', 'Divide', 'Add', 'Equals']
     for (const label of labels) {
       expect(screen.getByRole('button', { name: label })).toBeEnabled()
     }
@@ -199,6 +199,65 @@ describe('App', () => {
 
       expect(screen.queryByRole('alert')).not.toBeInTheDocument()
       expect(display()).toHaveTextContent(/^0$/)
+    })
+  })
+
+  describe('division', () => {
+    const divisionByZero = () =>
+      jsonResponse({ error: { code: 'division_by_zero', message: 'division by zero' } }, 422)
+
+    it('sends both operands to the API and shows the quotient', async () => {
+      fetchMock.mockResolvedValue(jsonResponse({ result: 0.25 }))
+      render(<App />)
+
+      press('1', 'Divide', '4', 'Equals')
+
+      await waitFor(() => expect(display()).toHaveTextContent(/^0\.25$/))
+      expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+        '/api/v1/divide',
+        expect.objectContaining({ method: 'POST', body: '{"a":1,"b":4}' }),
+      )
+    })
+
+    it('shows a friendly message when dividing by zero', async () => {
+      fetchMock.mockResolvedValue(divisionByZero())
+      render(<App />)
+
+      press('1', 'Divide', '0', 'Equals')
+
+      const alert = await screen.findByRole('alert')
+      expect(alert).toHaveTextContent('Cannot divide by zero.')
+      expect(alert).not.toHaveTextContent('division by zero')
+    })
+
+    it('clears the error and recovers with the next digit', async () => {
+      fetchMock.mockResolvedValueOnce(divisionByZero()).mockResolvedValueOnce(jsonResponse({ result: 0.2 }))
+      render(<App />)
+
+      press('1', 'Divide', '0', 'Equals')
+      await screen.findByRole('alert')
+      press('5')
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      press('Equals')
+      await waitFor(() => expect(display()).toHaveTextContent(/^0\.2$/))
+      expect(fetchMock).toHaveBeenLastCalledWith(
+        '/api/v1/divide',
+        expect.objectContaining({ body: '{"a":1,"b":5}' }),
+      )
+    })
+
+    it('clears the error and resets the calculator with Clear', async () => {
+      fetchMock.mockResolvedValue(divisionByZero())
+      render(<App />)
+
+      press('1', 'Divide', '0', 'Equals')
+      await screen.findByRole('alert')
+      press('Clear')
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(display()).toHaveTextContent(/^0$/)
+      expect(screen.getByRole('button', { name: 'Equals' })).toBeEnabled()
     })
   })
 })

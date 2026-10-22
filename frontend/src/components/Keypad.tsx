@@ -79,6 +79,13 @@ function Keypad({ onAction, disabled = false }: KeypadProps) {
       </div>
       <div className="keypad-operators">
         <Key
+          label="÷"
+          accessibleName="Divide"
+          className="key-operator"
+          disabled={disabled}
+          onPress={() => onAction({ type: 'operator', operator: '÷' })}
+        />
+        <Key
           label="+"
           accessibleName="Add"
           className="key-operator"

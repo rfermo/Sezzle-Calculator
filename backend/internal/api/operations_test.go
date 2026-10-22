@@ -121,6 +121,92 @@ func TestAddRejectsWrongMethod(t *testing.T) {
 	}
 }
 
+func TestDivideReturnsQuotient(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want float64
+	}{
+		{"exact quotient", `{"a": 6, "b": 3}`, 2},
+		{"fractional result", `{"a": 1, "b": 4}`, 0.25},
+		{"negative result", `{"a": -6, "b": 3}`, -2},
+		{"zero dividend", `{"a": 0, "b": 5}`, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := postJSON(NewRouter(discardLogger()), "/api/v1/divide", tt.body)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200 (body %q)", rec.Code, rec.Body.String())
+			}
+			var body resultResponse
+			if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+				t.Fatalf("body is not a result response: %v", err)
+			}
+			if body.Result != tt.want {
+				t.Errorf("result = %v, want %v", body.Result, tt.want)
+			}
+		})
+	}
+}
+
+func TestDivideReportsDivisionByZeroAsUnprocessable(t *testing.T) {
+	for _, body := range []string{
+		`{"a": 1, "b": 0}`,
+		`{"a": 1, "b": -0}`,
+		`{"a": 1, "b": 0.0}`,
+		`{"a": 0, "b": 0}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			rec := postJSON(NewRouter(discardLogger()), "/api/v1/divide", body)
+
+			detail := assertErrorEnvelope(t, rec, http.StatusUnprocessableEntity, codeDivisionByZero)
+			if detail.Message != "division by zero" {
+				t.Errorf("message = %q, want %q", detail.Message, "division by zero")
+			}
+		})
+	}
+}
+
+func TestDivideReportsOverflowAsUnprocessable(t *testing.T) {
+	rec := postJSON(NewRouter(discardLogger()), "/api/v1/divide", `{"a": 1.7976931348623157e308, "b": 0.5}`)
+
+	assertErrorEnvelope(t, rec, http.StatusUnprocessableEntity, codeResultNotFinite)
+}
+
+func TestDivideRejectsInvalidRequests(t *testing.T) {
+	tests := []struct {
+		name        string
+		body        string
+		wantMessage string
+	}{
+		{"missing a", `{"b": 3}`, `field "a" is required`},
+		{"missing b", `{"a": 2}`, `field "b" is required`},
+		{"string operand", `{"a": 2, "b": "3"}`, `field "b" has an invalid type`},
+		{"unknown field", `{"a": 2, "b": 3, "c": 4}`, `unknown field "c"`},
+		{"malformed JSON", `{"a": 2,`, "request body is not valid JSON"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := postJSON(NewRouter(discardLogger()), "/api/v1/divide", tt.body)
+
+			detail := assertErrorEnvelope(t, rec, http.StatusBadRequest, codeInvalidRequest)
+			if detail.Message != tt.wantMessage {
+				t.Errorf("message = %q, want %q", detail.Message, tt.wantMessage)
+			}
+		})
+	}
+}
+
+func TestDivideRejectsWrongMethod(t *testing.T) {
+	rec := serveRequest(NewRouter(discardLogger()), http.MethodGet, "/api/v1/divide")
+
+	assertErrorEnvelope(t, rec, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+	if allow := rec.Header().Get("Allow"); !strings.Contains(allow, http.MethodPost) {
+		t.Errorf("Allow = %q, want it to list POST", allow)
+	}
+}
+
 func TestHandleBinaryHidesUnexpectedErrors(t *testing.T) {
 	handler := handleBinary(func(float64, float64) (float64, error) {
 		return 0, errors.New("database password is hunter2")

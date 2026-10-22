@@ -1,5 +1,5 @@
 import { jsonResponse } from '../test/jsonResponse'
-import { add, ApiError, postOperation } from './client'
+import { add, ApiError, divide, postOperation } from './client'
 
 describe('postOperation', () => {
   const fetchMock = vi.spyOn(globalThis, 'fetch')
@@ -112,5 +112,29 @@ describe('add', () => {
       name: 'ApiError',
       code: 'result_not_finite',
     })
+  })
+})
+
+describe('divide', () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch')
+
+  afterEach(() => {
+    fetchMock.mockReset()
+  })
+
+  it('POSTs both operands to the divide endpoint and returns the quotient', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ result: 0.25 }))
+
+    await expect(divide(1, 4)).resolves.toBe(0.25)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/divide', expect.objectContaining({ body: '{"a":1,"b":4}' }))
+  })
+
+  it('rejects with the backend error code for a zero divisor', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ error: { code: 'division_by_zero', message: 'division by zero' } }, 422),
+    )
+
+    await expect(divide(1, 0)).rejects.toMatchObject({ name: 'ApiError', code: 'division_by_zero' })
   })
 })
